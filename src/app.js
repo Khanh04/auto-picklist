@@ -2,6 +2,7 @@ const fs = require('fs');
 const { parseOrderItemsFromPDF } = require('./modules/pdfParser');
 const { parseOrderItemsFromEbayCSV, findEbayCSV } = require('./modules/ebayParser');
 const { loadPriceList } = require('./modules/priceListLoader');
+const { findBestSupplier, getDatabaseStats, testConnection } = require('./modules/databaseLoader');
 const { createPicklist, convertToCSV } = require('./modules/picklistGenerator');
 const { generatePDF, calculateSummary } = require('./modules/pdfGenerator');
 
@@ -14,7 +15,8 @@ class AutoPicklistApp {
             inputType: config.inputType || 'auto', // 'pdf', 'ebay', or 'auto'
             pdfInputPath: config.pdfInputPath || 'H order.pdf',
             ebayInputPath: config.ebayInputPath || null, // Will auto-detect if null
-            excelInputPath: config.excelInputPath || 'GENERAL PRICE LIST.xlsx',
+            useDatabase: config.useDatabase !== false, // Default to true, use database
+            excelInputPath: config.excelInputPath || 'GENERAL PRICE LIST.xlsx', // Fallback for legacy mode
             csvOutputPath: config.csvOutputPath || 'final_picklist.csv',
             pdfOutputPath: config.pdfOutputPath || 'final_picklist.pdf',
             ...config
@@ -63,16 +65,33 @@ class AutoPicklistApp {
             }
             console.log(`📄 Loaded ${orderItems.length} order items from ${inputSource}`);
 
-            // Load price list
-            const priceData = loadPriceList(this.config.excelInputPath);
-            if (!priceData) {
-                throw new Error('Failed to load price list from Excel file');
+            // Load price data (database or Excel)
+            let picklist;
+            if (this.config.useDatabase) {
+                // Test database connection first
+                const dbConnected = await testConnection();
+                if (!dbConnected) {
+                    throw new Error('Database connection failed. Make sure PostgreSQL is running and database is set up.');
+                }
+                
+                const stats = await getDatabaseStats();
+                console.log(`💾 Using PostgreSQL database (${stats.products} products, ${stats.suppliers} suppliers, ${stats.prices} prices)`);
+                
+                // Create picklist using database
+                console.log('🔍 Matching items and finding best suppliers...');
+                picklist = await this.createPicklistFromDatabase(orderItems);
+            } else {
+                // Use Excel file (legacy mode)
+                const priceData = loadPriceList(this.config.excelInputPath);
+                if (!priceData) {
+                    throw new Error('Failed to load price list from Excel file');
+                }
+                console.log(`💾 Loaded price list with ${priceData.length} entries (Excel mode)`);
+                
+                // Create picklist
+                console.log('🔍 Matching items and finding best suppliers...');
+                picklist = createPicklist(orderItems, priceData);
             }
-            console.log(`💾 Loaded price list with ${priceData.length} entries`);
-
-            // Create picklist
-            console.log('🔍 Matching items and finding best suppliers...');
-            const picklist = createPicklist(orderItems, priceData);
 
             // Save outputs
             const csvContent = convertToCSV(picklist);
@@ -83,15 +102,19 @@ class AutoPicklistApp {
             const summary = calculateSummary(picklist);
             this.displaySummary(summary, orderItems.length);
 
-            return {
+            const response = {
                 success: true,
                 picklist,
+                picklistData: picklist, // Include for frontend preview
                 summary,
                 files: {
                     csv: this.config.csvOutputPath,
                     pdf: this.config.pdfOutputPath
                 }
             };
+            
+            console.log(`📊 Returning picklist with ${picklist.length} items`);
+            return response;
 
         } catch (error) {
             console.error('❌ Error generating picklist:', error.message);
@@ -100,6 +123,31 @@ class AutoPicklistApp {
                 error: error.message
             };
         }
+    }
+
+    /**
+     * Create picklist using database queries
+     * @param {Array} orderItems - Array of order items
+     * @returns {Promise<Array>} Final picklist with supplier selections
+     */
+    async createPicklistFromDatabase(orderItems) {
+        const picklist = [];
+
+        for (const orderItem of orderItems) {
+            const { supplier, price } = await findBestSupplier(orderItem.item);
+            
+            const picklistItem = {
+                quantity: orderItem.quantity,
+                item: orderItem.item,
+                selectedSupplier: supplier || 'No supplier found',
+                unitPrice: price || 'No price found',
+                totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A'
+            };
+
+            picklist.push(picklistItem);
+        }
+
+        return picklist;
     }
 
     /**
