@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 
-function FileUpload({ onFileUpload }) {
+function FileUpload({ onFileUpload, onManageDatabase }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
@@ -118,14 +118,24 @@ function FileUpload({ onFileUpload }) {
         </div>
       )}
 
-      <button 
-        type="button" 
-        className="process-btn"
-        disabled={!selectedFile}
-        onClick={handleProcess}
-      >
-        Generate Picklist
-      </button>
+      <div className="action-buttons">
+        <button 
+          type="button" 
+          className="process-btn"
+          disabled={!selectedFile}
+          onClick={handleProcess}
+        >
+          Generate Picklist
+        </button>
+        
+        <button 
+          type="button" 
+          className="manage-db-btn"
+          onClick={onManageDatabase}
+        >
+          Manage Database
+        </button>
+      </div>
     </div>
   )
 }

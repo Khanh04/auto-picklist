@@ -2,12 +2,13 @@ import React, { useState } from 'react'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
+import DatabaseManager from './components/DatabaseManager'
 import Results from './components/Results'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'results', 'error'
+  const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'database', 'results', 'error'
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -86,12 +87,20 @@ function App() {
     setCurrentView('preview')
   }
 
+  const handleManageDatabase = () => {
+    setCurrentView('database')
+  }
+
+  const handleBackFromDatabase = () => {
+    setCurrentView('upload')
+  }
+
   return (
     <div className="container">
       <Header />
       <main className="main">
         {currentView === 'upload' && (
-          <FileUpload onFileUpload={handleFileUpload} />
+          <FileUpload onFileUpload={handleFileUpload} onManageDatabase={handleManageDatabase} />
         )}
         
         {currentView === 'processing' && (
@@ -109,6 +118,10 @@ function App() {
             onExport={handleExportPicklist}
             onBack={handleReset}
           />
+        )}
+
+        {currentView === 'database' && (
+          <DatabaseManager onBack={handleBackFromDatabase} />
         )}
 
         {currentView === 'results' && (

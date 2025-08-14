@@ -114,6 +114,170 @@ app.post('/upload', upload.single('csvFile'), async (req, res) => {
     }
 });
 
+// Get all suppliers for database management
+app.get('/api/suppliers', async (req, res) => {
+    try {
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(`
+            SELECT s.id, s.name, COUNT(sp.product_id) as product_count
+            FROM suppliers s
+            LEFT JOIN supplier_prices sp ON s.id = sp.supplier_id
+            GROUP BY s.id, s.name
+            ORDER BY s.name
+        `);
+        
+        res.json({
+            success: true,
+            suppliers: result.rows
+        });
+    } catch (error) {
+        console.error('Error fetching suppliers:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch suppliers'
+        });
+    }
+});
+
+// Add new supplier
+app.post('/api/suppliers', async (req, res) => {
+    try {
+        const { name } = req.body;
+        
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                success: false,
+                error: 'Supplier name is required'
+            });
+        }
+        
+        const { pool } = require('./src/database/config');
+        
+        // Check if supplier already exists
+        const existingResult = await pool.query(
+            'SELECT id FROM suppliers WHERE LOWER(name) = LOWER($1)',
+            [name.trim()]
+        );
+        
+        if (existingResult.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Supplier already exists'
+            });
+        }
+        
+        // Insert new supplier
+        const result = await pool.query(
+            'INSERT INTO suppliers (name) VALUES ($1) RETURNING id, name',
+            [name.trim()]
+        );
+        
+        res.json({
+            success: true,
+            supplier: result.rows[0],
+            message: 'Supplier added successfully'
+        });
+    } catch (error) {
+        console.error('Error adding supplier:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to add supplier'
+        });
+    }
+});
+
+// Add new item with supplier and price
+app.post('/api/items', async (req, res) => {
+    try {
+        const { description, supplier, price } = req.body;
+        
+        if (!description || !supplier || !price) {
+            return res.status(400).json({
+                success: false,
+                error: 'Description, supplier, and price are required'
+            });
+        }
+        
+        const numericPrice = parseFloat(price);
+        if (isNaN(numericPrice) || numericPrice <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Price must be a valid positive number'
+            });
+        }
+        
+        const { pool } = require('./src/database/config');
+        
+        // Start transaction
+        await pool.query('BEGIN');
+        
+        try {
+            // Get supplier ID
+            const supplierResult = await pool.query(
+                'SELECT id FROM suppliers WHERE name = $1',
+                [supplier]
+            );
+            
+            if (supplierResult.rows.length === 0) {
+                throw new Error('Supplier not found');
+            }
+            
+            const supplierId = supplierResult.rows[0].id;
+            
+            // Check if product already exists
+            let productId;
+            const existingProduct = await pool.query(
+                'SELECT id FROM products WHERE LOWER(description) = LOWER($1)',
+                [description.trim()]
+            );
+            
+            if (existingProduct.rows.length > 0) {
+                productId = existingProduct.rows[0].id;
+                
+                // Check if this supplier already has this product
+                const existingPrice = await pool.query(
+                    'SELECT id FROM supplier_prices WHERE product_id = $1 AND supplier_id = $2',
+                    [productId, supplierId]
+                );
+                
+                if (existingPrice.rows.length > 0) {
+                    throw new Error('This supplier already has this product');
+                }
+            } else {
+                // Insert new product
+                const productResult = await pool.query(
+                    'INSERT INTO products (description) VALUES ($1) RETURNING id',
+                    [description.trim()]
+                );
+                productId = productResult.rows[0].id;
+            }
+            
+            // Insert supplier price
+            await pool.query(
+                'INSERT INTO supplier_prices (product_id, supplier_id, price) VALUES ($1, $2, $3)',
+                [productId, supplierId, numericPrice]
+            );
+            
+            await pool.query('COMMIT');
+            
+            res.json({
+                success: true,
+                message: 'Item added successfully'
+            });
+        } catch (err) {
+            await pool.query('ROLLBACK');
+            throw err;
+        }
+    } catch (error) {
+        console.error('Error adding item:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to add item'
+        });
+    }
+});
+
 // Export edited picklist
 app.post('/export', async (req, res) => {
     try {
