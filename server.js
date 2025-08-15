@@ -140,6 +140,105 @@ app.get('/api/suppliers', async (req, res) => {
     }
 });
 
+// Get all items for a specific supplier
+app.get('/api/suppliers/:id/items', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(`
+            SELECT sp.id as supplier_price_id, p.id as product_id, p.description, sp.price, s.name as supplier_name
+            FROM supplier_prices sp
+            JOIN products p ON sp.product_id = p.id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE sp.supplier_id = $1
+            ORDER BY p.description
+        `, [id]);
+        
+        res.json({
+            success: true,
+            items: result.rows
+        });
+    } catch (error) {
+        console.error('Error fetching supplier items:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch supplier items'
+        });
+    }
+});
+
+// Update item price for a supplier
+app.put('/api/suppliers/:supplierId/items/:supplierPriceId', async (req, res) => {
+    try {
+        const { supplierId, supplierPriceId } = req.params;
+        const { price } = req.body;
+        
+        if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid positive price is required'
+            });
+        }
+        
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(
+            'UPDATE supplier_prices SET price = $1 WHERE id = $2 AND supplier_id = $3 RETURNING *',
+            [parseFloat(price), supplierPriceId, supplierId]
+        );
+        
+        if (result.rows.length > 0) {
+            res.json({
+                success: true,
+                message: 'Price updated successfully'
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: 'Item not found'
+            });
+        }
+    } catch (error) {
+        console.error('Error updating item price:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update item price'
+        });
+    }
+});
+
+// Delete item from supplier
+app.delete('/api/suppliers/:supplierId/items/:supplierPriceId', async (req, res) => {
+    try {
+        const { supplierId, supplierPriceId } = req.params;
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(
+            'DELETE FROM supplier_prices WHERE id = $1 AND supplier_id = $2 RETURNING *',
+            [supplierPriceId, supplierId]
+        );
+        
+        if (result.rows.length > 0) {
+            res.json({
+                success: true,
+                message: 'Item removed from supplier'
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: 'Item not found'
+            });
+        }
+    } catch (error) {
+        console.error('Error deleting supplier item:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete supplier item'
+        });
+    }
+});
+
 // Add new supplier
 app.post('/api/suppliers', async (req, res) => {
     try {
@@ -407,6 +506,66 @@ app.post('/api/store-preferences', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to store matching preferences'
+        });
+    }
+});
+
+// Get all matching preferences
+app.get('/api/preferences', async (req, res) => {
+    try {
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(`
+            SELECT mp.id, mp.original_item, mp.frequency, mp.last_used, mp.created_at,
+                   p.description as matched_description,
+                   s.name as supplier_name, sp.price
+            FROM matching_preferences mp
+            JOIN products p ON mp.matched_product_id = p.id
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            ORDER BY mp.last_used DESC, mp.frequency DESC
+        `);
+        
+        res.json({
+            success: true,
+            preferences: result.rows
+        });
+    } catch (error) {
+        console.error('Error fetching preferences:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch preferences'
+        });
+    }
+});
+
+// Delete a matching preference
+app.delete('/api/preferences/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(
+            'DELETE FROM matching_preferences WHERE id = $1 RETURNING original_item',
+            [id]
+        );
+        
+        if (result.rows.length > 0) {
+            res.json({
+                success: true,
+                message: `Preference for "${result.rows[0].original_item}" deleted successfully`
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: 'Preference not found'
+            });
+        }
+    } catch (error) {
+        console.error('Error deleting preference:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete preference'
         });
     }
 });

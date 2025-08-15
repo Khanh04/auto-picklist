@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(node:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(npm run build:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)",
+      "Bash(curl:*)",
+      "Bash(npm run web:*)",
+      "Bash(npm run preview:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(open http://localhost:3000)",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []

@@ -156,7 +156,27 @@ function PicklistPreview({ results, onExport, onBack }) {
     const newPicklist = [...picklist]
     newPicklist[index] = { ...newPicklist[index] }
     
-    if (field === 'selectedSupplier') {
+    if (field === 'matchedItem') {
+      // Handle matched item selection
+      if (!value) {
+        // Cleared selection
+        newPicklist[index].matchedItemId = null
+        newPicklist[index].manualOverride = false
+        newPicklist[index].selectedSupplier = 'No supplier found'
+        newPicklist[index].unitPrice = ''
+        newPicklist[index].totalPrice = 'N/A'
+      } else {
+        // Selected an item
+        const selectedItem = availableItems.find(item => item.id == value)
+        if (selectedItem) {
+          newPicklist[index].matchedItemId = selectedItem.id
+          newPicklist[index].manualOverride = true
+          newPicklist[index].selectedSupplier = selectedItem.bestSupplier
+          newPicklist[index].unitPrice = selectedItem.bestPrice
+          newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+        }
+      }
+    } else if (field === 'selectedSupplier') {
       newPicklist[index].selectedSupplier = value
       // If user changes supplier manually, don't reset price if it's from matched item
       if (!newPicklist[index].manualOverride) {
@@ -302,66 +322,56 @@ function PicklistPreview({ results, onExport, onBack }) {
       const selectedOption = selectOptions.find(option => option.value === item.matchedItemId)
       
       return (
-        <div className="space-y-1">
-          {/* Show learned match indicator */}
-          {item.learnedMatch && (
-            <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-              <span>[AI]</span>
-              <span>Learned preference applied</span>
+        <Select
+          value={selectedOption || null}
+          onChange={(selectedOption) => handleSelectChange(selectedOption, index)}
+          options={selectOptions}
+          isSearchable={true}
+          isClearable={true}
+          placeholder="No match / Select item..."
+          noOptionsMessage={({ inputValue }) => 
+            inputValue ? `No items found matching "${inputValue}"` : 'Start typing to search...'
+          }
+          className="text-sm"
+          classNamePrefix="react-select"
+          styles={{
+            control: (provided, state) => ({
+              ...provided,
+              minHeight: '40px',
+              border: `1px solid ${item.learnedMatch ? '#3b82f6' : '#d1d5db'}`,
+              borderRadius: '6px',
+              '&:hover': {
+                borderColor: item.learnedMatch ? '#2563eb' : '#9ca3af'
+              },
+              boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : 'none',
+              borderColor: state.isFocused ? '#3b82f6' : (item.learnedMatch ? '#3b82f6' : '#d1d5db')
+            }),
+            option: (provided, state) => ({
+              ...provided,
+              fontSize: '14px',
+              backgroundColor: state.isSelected ? '#dbeafe' : state.isFocused ? '#f3f4f6' : 'white',
+              color: state.isSelected ? '#1e40af' : '#374151',
+              '&:hover': {
+                backgroundColor: '#f3f4f6'
+              }
+            }),
+            menu: (provided) => ({
+              ...provided,
+              zIndex: 50,
+              maxHeight: '300px'
+            }),
+            menuList: (provided) => ({
+              ...provided,
+              maxHeight: '240px'
+            })
+          }}
+          formatOptionLabel={(option) => (
+            <div>
+              <div className="font-medium text-gray-900">{option.item.description}</div>
+              <div className="text-xs text-gray-600">${option.item.bestPrice} - {option.item.bestSupplier}</div>
             </div>
           )}
-          
-          <Select
-            value={selectedOption || null}
-            onChange={(selectedOption) => handleSelectChange(selectedOption, index)}
-            options={selectOptions}
-            isSearchable={true}
-            isClearable={true}
-            placeholder="Type to search items..."
-            noOptionsMessage={({ inputValue }) => 
-              inputValue ? `No items found matching "${inputValue}"` : 'Start typing to search...'
-            }
-            className="text-sm"
-            classNamePrefix="react-select"
-            styles={{
-              control: (provided, state) => ({
-                ...provided,
-                minHeight: '40px',
-                border: `1px solid ${item.learnedMatch ? '#3b82f6' : '#d1d5db'}`,
-                borderRadius: '6px',
-                '&:hover': {
-                  borderColor: item.learnedMatch ? '#2563eb' : '#9ca3af'
-                },
-                boxShadow: state.isFocused ? `0 0 0 2px ${item.learnedMatch ? '#3b82f6' : '#3b82f6'}` : 'none',
-                borderColor: state.isFocused ? '#3b82f6' : (item.learnedMatch ? '#3b82f6' : '#d1d5db')
-              }),
-              option: (provided, state) => ({
-                ...provided,
-                fontSize: '14px',
-                backgroundColor: state.isSelected ? '#dbeafe' : state.isFocused ? '#f3f4f6' : 'white',
-                color: state.isSelected ? '#1e40af' : '#374151',
-                '&:hover': {
-                  backgroundColor: '#f3f4f6'
-                }
-              }),
-              menu: (provided) => ({
-                ...provided,
-                zIndex: 50,
-                maxHeight: '300px'
-              }),
-              menuList: (provided) => ({
-                ...provided,
-                maxHeight: '240px'
-              })
-            }}
-            formatOptionLabel={(option) => (
-              <div>
-                <div className="font-medium text-gray-900">{option.item.description}</div>
-                <div className="text-xs text-gray-600">${option.item.bestPrice} - {option.item.bestSupplier}</div>
-              </div>
-            )}
-          />
-        </div>
+        />
       )
     }
     

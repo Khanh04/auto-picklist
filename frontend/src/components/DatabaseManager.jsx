@@ -2,9 +2,14 @@ import React, { useState, useEffect } from 'react';
 
 const DatabaseManager = ({ onBack }) => {
     const [suppliers, setSuppliers] = useState([]);
+    const [preferences, setPreferences] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [activeTab, setActiveTab] = useState('manage'); // 'manage' or 'preferences'
+    const [selectedSupplier, setSelectedSupplier] = useState(null);
+    const [supplierItems, setSupplierItems] = useState([]);
+    const [editingPrice, setEditingPrice] = useState(null); // {supplierId, supplierPriceId, currentPrice}
 
     // Form states
     const [newSupplier, setNewSupplier] = useState({ name: '' });
@@ -16,6 +21,7 @@ const DatabaseManager = ({ onBack }) => {
 
     useEffect(() => {
         fetchSuppliers();
+        fetchPreferences();
     }, []);
 
     const fetchSuppliers = async () => {
@@ -27,6 +33,139 @@ const DatabaseManager = ({ onBack }) => {
             }
         } catch (err) {
             console.error('Error fetching suppliers:', err);
+        }
+    };
+
+    const fetchPreferences = async () => {
+        try {
+            const response = await fetch('/api/preferences');
+            if (response.ok) {
+                const data = await response.json();
+                setPreferences(data.preferences || []);
+            }
+        } catch (err) {
+            console.error('Error fetching preferences:', err);
+        }
+    };
+
+    const handleDeletePreference = async (id, originalItem) => {
+        if (!confirm(`Are you sure you want to delete the preference for "${originalItem}"?`)) {
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await fetch(`/api/preferences/${id}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setSuccess(data.message);
+                fetchPreferences(); // Refresh preferences list
+            } else {
+                setError(data.error || 'Failed to delete preference');
+            }
+        } catch (err) {
+            setError('Network error: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSupplierClick = async (supplier) => {
+        setSelectedSupplier(supplier);
+        setLoading(true);
+        setError('');
+
+        try {
+            const response = await fetch(`/api/suppliers/${supplier.id}/items`);
+            if (response.ok) {
+                const data = await response.json();
+                setSupplierItems(data.items || []);
+            } else {
+                setError('Failed to fetch supplier items');
+            }
+        } catch (err) {
+            setError('Network error: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePriceEdit = (item) => {
+        setEditingPrice({
+            supplierId: selectedSupplier.id,
+            supplierPriceId: item.supplier_price_id,
+            currentPrice: item.price
+        });
+    };
+
+    const handlePriceUpdate = async (newPrice) => {
+        if (!editingPrice) return;
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await fetch(`/api/suppliers/${editingPrice.supplierId}/items/${editingPrice.supplierPriceId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ price: newPrice })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setSuccess('Price updated successfully');
+                setEditingPrice(null);
+                // Refresh supplier items
+                handleSupplierClick(selectedSupplier);
+            } else {
+                setError(data.error || 'Failed to update price');
+            }
+        } catch (err) {
+            setError('Network error: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleItemDelete = async (item) => {
+        if (!confirm(`Are you sure you want to remove "${item.description}" from ${selectedSupplier.name}?`)) {
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await fetch(`/api/suppliers/${selectedSupplier.id}/items/${item.supplier_price_id}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setSuccess(data.message);
+                // Refresh supplier items and suppliers list
+                handleSupplierClick(selectedSupplier);
+                fetchSuppliers();
+            } else {
+                setError(data.error || 'Failed to delete item');
+            }
+        } catch (err) {
+            setError('Network error: ' + err.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -124,11 +263,37 @@ const DatabaseManager = ({ onBack }) => {
                             ← Back to Upload
                         </button>
                         <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg">
-                            🗄️ Database Management
+                            Database Management
                         </h2>
                         <p className="text-lg text-white opacity-90">
-                            Add new suppliers and items to the database
+                            Manage suppliers, items, and item matching preferences
                         </p>
+                        
+                        {/* Tabs */}
+                        <div className="flex justify-center mt-6">
+                            <div className="bg-white bg-opacity-20 rounded-lg p-1 inline-flex">
+                                <button
+                                    onClick={() => setActiveTab('manage')}
+                                    className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                        activeTab === 'manage'
+                                            ? 'bg-white text-blue-600 shadow-md'
+                                            : 'text-white hover:bg-white hover:bg-opacity-10'
+                                    }`}
+                                >
+                                    Manage Data
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('preferences')}
+                                    className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                        activeTab === 'preferences'
+                                            ? 'bg-white text-blue-600 shadow-md'
+                                            : 'text-white hover:bg-white hover:bg-opacity-10'
+                                    }`}
+                                >
+                                    Item Preferences ({preferences.length})
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Alert Messages */}
@@ -146,8 +311,11 @@ const DatabaseManager = ({ onBack }) => {
                         </div>
                     )}
 
-                    {/* Forms Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    {/* Tab Content */}
+                    {activeTab === 'manage' && (
+                        <>
+                            {/* Forms Grid */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                         {/* Add Supplier Form */}
                         <div className="bg-white rounded-xl shadow-lg p-6">
                             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -268,7 +436,7 @@ const DatabaseManager = ({ onBack }) => {
                     {/* Current Suppliers List */}
                     <div className="bg-white rounded-xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                            📋 Current Suppliers ({suppliers.length})
+                            Current Suppliers ({suppliers.length})
                         </h3>
                         {suppliers.length === 0 ? (
                             <div className="text-center py-8 text-gray-500">
@@ -280,19 +448,225 @@ const DatabaseManager = ({ onBack }) => {
                                 {suppliers.map((supplier) => (
                                     <div 
                                         key={supplier.id} 
-                                        className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:scale-105 transition-all duration-300"
+                                        onClick={() => handleSupplierClick(supplier)}
+                                        className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:scale-105 transition-all duration-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300"
                                     >
                                         <div className="font-semibold text-gray-800 text-lg mb-1">
                                             {supplier.name}
                                         </div>
-                                        <div className="text-sm text-gray-600">
+                                        <div className="text-sm text-gray-600 mb-2">
                                             {supplier.product_count || 0} items
+                                        </div>
+                                        <div className="text-xs text-blue-600 font-medium">
+                                            Click to view items →
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
+                        </>
+                    )}
+
+                    {/* Preferences Tab */}
+                    {activeTab === 'preferences' && (
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                Item Matching Preferences
+                            </h3>
+                            <p className="text-gray-600 mb-6">
+                                These are learned preferences from your previous manual item selections. 
+                                The system will automatically apply these matches in future uploads.
+                            </p>
+                            
+                            {preferences.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">
+                                    <div className="text-6xl mb-4">🤖</div>
+                                    <h4 className="text-xl font-semibold mb-2">No Preferences Yet</h4>
+                                    <p className="max-w-md mx-auto">
+                                        Preferences are created automatically when you manually select item matches 
+                                        in the picklist preview and export them. The system learns from your choices!
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-50">
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Original Item</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Matched To</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Supplier</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Price</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Used</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Last Used</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {preferences.map((pref) => (
+                                                <tr key={pref.id} className="hover:bg-gray-50">
+                                                    <td className="border border-gray-200 p-3">
+                                                        <div className="font-medium text-gray-900 max-w-xs">
+                                                            {pref.original_item}
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3">
+                                                        <div className="text-gray-900 max-w-xs">
+                                                            {pref.matched_description}
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                            {pref.supplier_name}
+                                                        </span>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3">
+                                                        <span className="font-medium text-green-600">
+                                                            ${pref.price}
+                                                        </span>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3 text-center">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            {pref.frequency}x
+                                                        </span>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3 text-sm text-gray-600">
+                                                        {new Date(pref.last_used).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3">
+                                                        <button
+                                                            onClick={() => handleDeletePreference(pref.id, pref.original_item)}
+                                                            disabled={loading}
+                                                            className="text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                                                            title="Delete this preference"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Supplier Detail Modal */}
+                    {selectedSupplier && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+                                {/* Modal Header */}
+                                <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-2xl font-bold">{selectedSupplier.name}</h3>
+                                            <p className="text-blue-100">{supplierItems.length} items</p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setSelectedSupplier(null);
+                                                setSupplierItems([]);
+                                                setEditingPrice(null);
+                                            }}
+                                            className="text-white hover:bg-white hover:bg-opacity-20 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Modal Content */}
+                                <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                                    {supplierItems.length === 0 ? (
+                                        <div className="text-center py-12 text-gray-500">
+                                            <div className="text-6xl mb-4">📦</div>
+                                            <h4 className="text-xl font-semibold mb-2">No Items Yet</h4>
+                                            <p>This supplier doesn't have any items yet. Add items using the form above.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse">
+                                                <thead>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Item Description</th>
+                                                        <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Price</th>
+                                                        <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {supplierItems.map((item) => (
+                                                        <tr key={item.supplier_price_id} className="hover:bg-gray-50">
+                                                            <td className="border border-gray-200 p-3">
+                                                                <div className="font-medium text-gray-900">
+                                                                    {item.description}
+                                                                </div>
+                                                            </td>
+                                                            <td className="border border-gray-200 p-3">
+                                                                {editingPrice?.supplierPriceId === item.supplier_price_id ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-gray-600">$</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min="0"
+                                                                            defaultValue={editingPrice.currentPrice}
+                                                                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === 'Enter') {
+                                                                                    handlePriceUpdate(e.target.value);
+                                                                                } else if (e.key === 'Escape') {
+                                                                                    setEditingPrice(null);
+                                                                                }
+                                                                            }}
+                                                                            onBlur={(e) => {
+                                                                                if (e.target.value !== editingPrice.currentPrice) {
+                                                                                    handlePriceUpdate(e.target.value);
+                                                                                } else {
+                                                                                    setEditingPrice(null);
+                                                                                }
+                                                                            }}
+                                                                            autoFocus
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    <span 
+                                                                        className="font-medium text-green-600 cursor-pointer hover:bg-green-50 px-2 py-1 rounded"
+                                                                        onClick={() => handlePriceEdit(item)}
+                                                                        title="Click to edit price"
+                                                                    >
+                                                                        ${item.price}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="border border-gray-200 p-3">
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => handlePriceEdit(item)}
+                                                                        disabled={loading || editingPrice?.supplierPriceId === item.supplier_price_id}
+                                                                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50 text-sm"
+                                                                    >
+                                                                        Edit Price
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleItemDelete(item)}
+                                                                        disabled={loading}
+                                                                        className="text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50 text-sm"
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

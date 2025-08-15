@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 
-function FileUpload({ onFileUpload, onManageDatabase }) {
+function FileUpload({ onFileUpload }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
@@ -136,7 +136,7 @@ function FileUpload({ onFileUpload, onManageDatabase }) {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+        <div className="flex justify-center mt-8">
           <button 
             type="button" 
             className={`px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 transform ${
@@ -147,15 +147,7 @@ function FileUpload({ onFileUpload, onManageDatabase }) {
             disabled={!selectedFile}
             onClick={handleProcess}
           >
-            📊 Generate Picklist
-          </button>
-          
-          <button 
-            type="button" 
-            className="px-8 py-4 gradient-green text-white rounded-lg font-semibold text-lg hover:scale-105 hover:shadow-lg transition-all duration-300 transform"
-            onClick={onManageDatabase}
-          >
-            🗄️ Manage Database
+            Generate Picklist
           </button>
         </div>
       </div>

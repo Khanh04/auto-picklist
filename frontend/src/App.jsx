@@ -1,10 +1,24 @@
 import React, { useState } from 'react'
+import { ThemeProvider, createTheme } from '@mui/material/styles'
+import { CssBaseline, Container, Box, Tabs, Tab, Paper } from '@mui/material'
+import { Upload, Preview, Storage } from '@mui/icons-material'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
 import DatabaseManager from './components/DatabaseManager'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
+
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#667eea',
+    },
+    secondary: {
+      main: '#764ba2',
+    },
+  },
+})
 
 function App() {
   const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'database', 'error'
@@ -59,20 +73,22 @@ function App() {
 
   // Removed handleBackToPreview since Results component is no longer used
 
-  const handleManageDatabase = () => {
-    setCurrentView('database')
-  }
-
-  const handleBackFromDatabase = () => {
-    setCurrentView('upload')
+  const handleNavigate = (view) => {
+    setCurrentView(view)
+    // Reset states when navigating
+    if (view === 'upload') {
+      setResults(null)
+      setError(null)
+      setIsProcessing(false)
+    }
   }
 
   return (
     <div className="min-h-screen gradient-bg">
-      <Header />
+      <Header currentView={currentView} onNavigate={handleNavigate} />
       <main className="flex-1">
         {currentView === 'upload' && (
-          <FileUpload onFileUpload={handleFileUpload} onManageDatabase={handleManageDatabase} />
+          <FileUpload onFileUpload={handleFileUpload} />
         )}
         
         {currentView === 'processing' && (
@@ -95,7 +111,7 @@ function App() {
         )}
 
         {currentView === 'database' && (
-          <DatabaseManager onBack={handleBackFromDatabase} />
+          <DatabaseManager onBack={() => handleNavigate('upload')} />
         )}
         
         {currentView === 'error' && (
