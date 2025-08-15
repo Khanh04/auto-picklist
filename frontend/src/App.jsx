@@ -25,6 +25,7 @@ function App() {
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [editedPicklist, setEditedPicklist] = useState(null) // Store edited picklist state
 
   const handleFileUpload = async (file) => {
     setIsProcessing(true)
@@ -44,7 +45,8 @@ function App() {
 
       if (result.success) {
         setResults(result)
-        setCurrentView('preview') // Show preview first instead of results
+        setEditedPicklist(null) // Reset edited picklist for new upload
+        setCurrentView('upload') // Stay on upload tab but show preview
       } else {
         setError(result.error || 'Failed to process file')
         setCurrentView('error')
@@ -61,6 +63,7 @@ function App() {
   const handleReset = () => {
     setCurrentView('upload')
     setResults(null)
+    setEditedPicklist(null)
     setError(null)
     setIsProcessing(false)
   }
@@ -75,20 +78,30 @@ function App() {
 
   const handleNavigate = (view) => {
     setCurrentView(view)
-    // Reset states when navigating
-    if (view === 'upload') {
-      setResults(null)
-      setError(null)
-      setIsProcessing(false)
-    }
+    // Only reset states when explicitly resetting (not when just switching tabs)
+    // State will be preserved when switching between upload/database tabs
+  }
+
+  const handlePicklistUpdate = (updatedPicklist) => {
+    setEditedPicklist(updatedPicklist)
   }
 
   return (
     <div className="min-h-screen gradient-bg">
       <Header currentView={currentView} onNavigate={handleNavigate} />
       <main className="flex-1">
-        {currentView === 'upload' && (
+        {currentView === 'upload' && !results && (
           <FileUpload onFileUpload={handleFileUpload} />
+        )}
+        
+        {currentView === 'upload' && results && (
+          <PicklistPreview
+            results={results}
+            editedPicklist={editedPicklist}
+            onPicklistUpdate={handlePicklistUpdate}
+            onExport={handleExportPicklist}
+            onBack={handleReset}
+          />
         )}
         
         {currentView === 'processing' && (
@@ -105,6 +118,8 @@ function App() {
         {currentView === 'preview' && (
           <PicklistPreview
             results={results}
+            editedPicklist={editedPicklist}
+            onPicklistUpdate={handlePicklistUpdate}
             onExport={handleExportPicklist}
             onBack={handleReset}
           />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@mui/material'
 
-function PicklistPreview({ results, onExport, onBack }) {
+function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack }) {
   const [picklist, setPicklist] = useState([])
   const [editingCell, setEditingCell] = useState(null)
   const [availableSuppliers, setAvailableSuppliers] = useState([])
@@ -13,6 +13,30 @@ function PicklistPreview({ results, onExport, onBack }) {
   const [preferencesApplied, setPreferencesApplied] = useState(false) // Track if preferences have been applied
 
   useEffect(() => {
+    // If we have edited picklist from parent, use that instead of results
+    if (editedPicklist) {
+      setPicklist(editedPicklist)
+      setPreferencesApplied(true) // Already processed
+      
+      // Extract unique suppliers from edited picklist for dropdown
+      const suppliers = [...new Set(editedPicklist
+        .filter(item => item.selectedSupplier !== 'No supplier found')
+        .map(item => item.selectedSupplier)
+      )].sort()
+      setAvailableSuppliers(['No supplier found', ...suppliers])
+      
+      // Still need to fetch database data for dropdown options
+      fetchDatabaseData()
+      
+      // Also fetch supplier data for already matched items
+      editedPicklist.forEach(item => {
+        if (item.matchedItemId) {
+          fetchProductSuppliers(item.matchedItemId)
+        }
+      })
+      return
+    }
+
     // Reset preferences applied flag for new results
     setPreferencesApplied(false)
     
@@ -37,7 +61,7 @@ function PicklistPreview({ results, onExport, onBack }) {
     
     // Fetch available suppliers and items from database
     fetchDatabaseData()
-  }, [results])
+  }, [results, editedPicklist])
 
   // Apply preferences when both picklist and available items are ready
   useEffect(() => {
@@ -117,6 +141,9 @@ function PicklistPreview({ results, onExport, onBack }) {
       }))
       
       setPicklist(picklistWithMatches)
+      if (onPicklistUpdate) {
+        onPicklistUpdate(picklistWithMatches)
+      }
     } catch (error) {
       console.error('Error applying preferences:', error)
     }
@@ -210,6 +237,9 @@ function PicklistPreview({ results, onExport, onBack }) {
     }
     
     setPicklist(newPicklist)
+    if (onPicklistUpdate) {
+      onPicklistUpdate(newPicklist)
+    }
   }
 
   const handleCellEdit = (index, field, value) => {
@@ -270,6 +300,9 @@ function PicklistPreview({ results, onExport, onBack }) {
     }
     
     setPicklist(newPicklist)
+    if (onPicklistUpdate) {
+      onPicklistUpdate(newPicklist)
+    }
   }
 
   const calculateSummary = () => {
