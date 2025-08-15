@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import Select from 'react-select'
+import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@mui/material'
 
 function PicklistPreview({ results, onExport, onBack }) {
   const [picklist, setPicklist] = useState([])
@@ -7,6 +7,7 @@ function PicklistPreview({ results, onExport, onBack }) {
   const [availableSuppliers, setAvailableSuppliers] = useState([])
   const [availableItems, setAvailableItems] = useState([])
   const [selectOptions, setSelectOptions] = useState([]) // Options for react-select
+  const [productSuppliers, setProductSuppliers] = useState({}) // Cache of supplier options per product
   const [exportResult, setExportResult] = useState(null) // Store export results
   const [isExporting, setIsExporting] = useState(false) // Track export status
   const [preferencesApplied, setPreferencesApplied] = useState(false) // Track if preferences have been applied
@@ -62,14 +63,34 @@ function PicklistPreview({ results, onExport, onBack }) {
             const prefResult = await prefResponse.json()
             if (prefResult.success && prefResult.preference) {
               console.log(`Applied learned preference for "${item.originalItem}" -> "${prefResult.preference.description}"`)
-              return {
-                ...item,
-                matchedItemId: prefResult.preference.productId,
-                selectedSupplier: prefResult.preference.supplier,
-                unitPrice: prefResult.preference.price,
-                totalPrice: (prefResult.preference.price * item.quantity).toFixed(2),
-                manualOverride: false, // This is from learned preference, not manual
-                learnedMatch: true // Flag to indicate this came from learning
+              
+              // Find the product in available items to get all supplier options
+              const matchedProduct = availableItemsData.find(dbItem => dbItem.id === prefResult.preference.productId)
+              
+              if (matchedProduct) {
+                // Fetch suppliers for this product in the background
+                fetchProductSuppliers(prefResult.preference.productId)
+                
+                return {
+                  ...item,
+                  matchedItemId: prefResult.preference.productId,
+                  selectedSupplier: prefResult.preference.supplier, // Set preferred supplier as default
+                  unitPrice: prefResult.preference.price,
+                  totalPrice: (prefResult.preference.price * item.quantity).toFixed(2),
+                  manualOverride: false, // This is from learned preference, not manual
+                  learnedMatch: true, // Flag to indicate this came from learning
+                  preferredSupplier: prefResult.preference.supplier // Store the preferred supplier separately
+                }
+              } else {
+                // Product not found in current available items, just set the match
+                fetchProductSuppliers(prefResult.preference.productId)
+                
+                return {
+                  ...item,
+                  matchedItemId: prefResult.preference.productId,
+                  learnedMatch: true,
+                  preferredSupplier: prefResult.preference.supplier
+                }
               }
             }
           }
@@ -77,11 +98,16 @@ function PicklistPreview({ results, onExport, onBack }) {
           console.warn('Failed to get preference for', item.originalItem, error)
         }
         
-        // Fall back to automatic matching based on supplier/price
+        // Fall back to automatic matching based on supplier/price for items without preferences
         const matchedDbItem = availableItemsData.find(dbItem => 
           dbItem.bestSupplier === item.selectedSupplier &&
           Math.abs(parseFloat(dbItem.bestPrice) - parseFloat(item.unitPrice)) < 0.01
         )
+        
+        if (matchedDbItem) {
+          // Fetch suppliers for the automatically matched product
+          fetchProductSuppliers(matchedDbItem.id)
+        }
         
         return {
           ...item,
@@ -128,7 +154,26 @@ function PicklistPreview({ results, onExport, onBack }) {
     }
   }
 
-  const handleSelectChange = (selectedOption, index) => {
+  const fetchProductSuppliers = async (productId) => {
+    if (productSuppliers[productId]) {
+      return productSuppliers[productId]
+    }
+    
+    try {
+      const response = await fetch(`/api/products/${productId}/suppliers`)
+      if (response.ok) {
+        const data = await response.json()
+        const suppliers = data.suppliers || []
+        setProductSuppliers(prev => ({ ...prev, [productId]: suppliers }))
+        return suppliers
+      }
+    } catch (error) {
+      console.error('Error fetching product suppliers:', error)
+    }
+    return []
+  }
+
+  const handleSelectChange = async (selectedOption, index) => {
     const newPicklist = [...picklist]
     newPicklist[index] = { ...newPicklist[index] }
     
@@ -140,13 +185,28 @@ function PicklistPreview({ results, onExport, onBack }) {
       newPicklist[index].unitPrice = ''
       newPicklist[index].totalPrice = 'N/A'
     } else {
-      // Selected an item
+      // Selected an item - fetch all suppliers for this product
       const selectedItem = selectedOption.item
       newPicklist[index].matchedItemId = selectedItem.id
       newPicklist[index].manualOverride = true
-      newPicklist[index].selectedSupplier = selectedItem.bestSupplier
-      newPicklist[index].unitPrice = selectedItem.bestPrice
-      newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+      
+      // Fetch suppliers for this product
+      const suppliers = await fetchProductSuppliers(selectedItem.id)
+      
+      // Set the best price supplier as default, or use preferred if available
+      const preferredSupplier = newPicklist[index].preferredSupplier
+      const supplierToUse = suppliers.find(s => s.supplier_name === preferredSupplier) || suppliers[0]
+      
+      if (supplierToUse) {
+        newPicklist[index].selectedSupplier = supplierToUse.supplier_name
+        newPicklist[index].unitPrice = supplierToUse.price
+        newPicklist[index].totalPrice = (supplierToUse.price * newPicklist[index].quantity).toFixed(2)
+      } else {
+        // Fallback to original best supplier data
+        newPicklist[index].selectedSupplier = selectedItem.bestSupplier
+        newPicklist[index].unitPrice = selectedItem.bestPrice
+        newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+      }
     }
     
     setPicklist(newPicklist)
@@ -178,8 +238,18 @@ function PicklistPreview({ results, onExport, onBack }) {
       }
     } else if (field === 'selectedSupplier') {
       newPicklist[index].selectedSupplier = value
-      // If user changes supplier manually, don't reset price if it's from matched item
-      if (!newPicklist[index].manualOverride) {
+      
+      // If there's a matched item, update price based on selected supplier
+      if (newPicklist[index].matchedItemId && productSuppliers[newPicklist[index].matchedItemId]) {
+        const suppliers = productSuppliers[newPicklist[index].matchedItemId]
+        const selectedSupplier = suppliers.find(s => s.supplier_name === value)
+        
+        if (selectedSupplier) {
+          newPicklist[index].unitPrice = selectedSupplier.price
+          newPicklist[index].totalPrice = (selectedSupplier.price * newPicklist[index].quantity).toFixed(2)
+        }
+      } else if (!newPicklist[index].manualOverride) {
+        // Reset price if no specific supplier data available
         newPicklist[index].unitPrice = ''
         newPicklist[index].totalPrice = 'N/A'
       }
@@ -231,7 +301,9 @@ function PicklistPreview({ results, onExport, onBack }) {
         .filter(item => item.manualOverride && item.matchedItemId)
         .map(item => ({
           originalItem: item.originalItem,
-          matchedProductId: item.matchedItemId
+          matchedProductId: item.matchedItemId,
+          supplier: item.selectedSupplier,
+          price: item.unitPrice
         }))
       
       // Store preferences if any manual overrides were made
@@ -303,75 +375,123 @@ function PicklistPreview({ results, onExport, onBack }) {
     const isEditing = editingCell?.row === index && editingCell?.field === field
     
     if (field === 'selectedSupplier') {
+      // If there's a matched item, show suppliers for that specific product
+      const matchedItemId = item.matchedItemId
+      const productSpecificSuppliers = matchedItemId ? productSuppliers[matchedItemId] : null
+      const hasMultipleSuppliers = productSpecificSuppliers && productSpecificSuppliers.length > 1
+      
       return (
-        <select
-          value={value}
-          onChange={(e) => handleCellEdit(index, field, e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          {availableSuppliers.map(supplier => (
-            <option key={supplier} value={supplier}>
-              {supplier}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <select
+            value={value}
+            onChange={(e) => handleCellEdit(index, field, e.target.value)}
+            className={`w-full p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              hasMultipleSuppliers ? 'pr-8' : ''
+            }`}
+          >
+            {productSpecificSuppliers ? (
+              // Show suppliers for the specific matched product with prices
+              <>
+                <option value="No supplier found">No supplier found</option>
+                {productSpecificSuppliers.map(supplier => (
+                  <option key={supplier.supplier_price_id} value={supplier.supplier_name}>
+                    {supplier.supplier_name} — ${parseFloat(supplier.price).toFixed(2)}
+                  </option>
+                ))}
+              </>
+            ) : (
+              // Fallback to general supplier list
+              availableSuppliers.map(supplier => (
+                <option key={supplier} value={supplier}>
+                  {supplier}
+                </option>
+              ))
+            )}
+          </select>
+          {hasMultipleSuppliers && (
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {productSpecificSuppliers.length}
+              </span>
+            </div>
+          )}
+        </div>
       )
     }
 
     if (field === 'matchedItem') {
       const selectedOption = selectOptions.find(option => option.value === item.matchedItemId)
+      // Determine if this row is in the bottom 3 rows
+      const isBottomRows = index >= (picklist.length - 3)
       
       return (
-        <Select
-          value={selectedOption || null}
-          onChange={(selectedOption) => handleSelectChange(selectedOption, index)}
-          options={selectOptions}
-          isSearchable={true}
-          isClearable={true}
-          placeholder="No match / Select item..."
-          noOptionsMessage={({ inputValue }) => 
-            inputValue ? `No items found matching "${inputValue}"` : 'Start typing to search...'
-          }
-          className="text-sm"
-          classNamePrefix="react-select"
-          styles={{
-            control: (provided, state) => ({
-              ...provided,
-              minHeight: '40px',
-              border: `1px solid ${item.learnedMatch ? '#3b82f6' : '#d1d5db'}`,
-              borderRadius: '6px',
-              '&:hover': {
-                borderColor: item.learnedMatch ? '#2563eb' : '#9ca3af'
-              },
-              boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : 'none',
-              borderColor: state.isFocused ? '#3b82f6' : (item.learnedMatch ? '#3b82f6' : '#d1d5db')
-            }),
-            option: (provided, state) => ({
-              ...provided,
-              fontSize: '14px',
-              backgroundColor: state.isSelected ? '#dbeafe' : state.isFocused ? '#f3f4f6' : 'white',
-              color: state.isSelected ? '#1e40af' : '#374151',
-              '&:hover': {
-                backgroundColor: '#f3f4f6'
-              }
-            }),
-            menu: (provided) => ({
-              ...provided,
-              zIndex: 50,
-              maxHeight: '300px'
-            }),
-            menuList: (provided) => ({
-              ...provided,
-              maxHeight: '240px'
-            })
-          }}
-          formatOptionLabel={(option) => (
-            <div>
-              <div className="font-medium text-gray-900">{option.item.description}</div>
-              <div className="text-xs text-gray-600">${option.item.bestPrice} - {option.item.bestSupplier}</div>
+        <div className="space-y-1">
+          {/* Show learned match indicator */}
+          {item.learnedMatch && (
+            <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+              <span>AI</span>
+              <span>Learned preference applied</span>
             </div>
           )}
-        />
+          
+          <Autocomplete
+            value={selectedOption || null}
+            onChange={(event, newValue) => handleSelectChange(newValue, index)}
+            options={selectOptions}
+            getOptionLabel={(option) => option ? option.item.description : ''}
+            renderOption={(props, option) => (
+              <li {...props} key={option.value}>
+                <div>
+                  <div className="font-medium text-gray-900">{option.item.description}</div>
+                  <div className="text-xs text-gray-600">${option.item.bestPrice} - {option.item.bestSupplier}</div>
+                </div>
+              </li>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="No match / Select item..."
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    minHeight: '40px',
+                    fontSize: '14px',
+                    '& fieldset': {
+                      borderColor: item.learnedMatch ? '#3b82f6' : '#d1d5db',
+                    },
+                    '&:hover fieldset': {
+                      borderColor: item.learnedMatch ? '#2563eb' : '#9ca3af',
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: '#3b82f6',
+                      borderWidth: '2px',
+                    },
+                  },
+                }}
+              />
+            )}
+            clearOnEscape
+            disablePortal={!isBottomRows}
+            componentsProps={{
+              popper: {
+                placement: isBottomRows ? 'top' : 'bottom-start',
+                modifiers: [
+                  {
+                    name: 'flip',
+                    enabled: false,
+                  },
+                ],
+              },
+            }}
+            sx={{
+              width: '100%',
+              '& .MuiAutocomplete-listbox': {
+                maxHeight: '240px',
+                fontSize: '14px',
+              },
+            }}
+          />
+        </div>
       )
     }
     
@@ -472,8 +592,9 @@ function PicklistPreview({ results, onExport, onBack }) {
                   <li>• Type in the matched item field to instantly search and filter 500+ items</li>
                   <li>• Use arrow keys, Enter, and Escape for keyboard navigation</li>
                   <li>• Items with blue borders show learned preferences from your past selections</li>
+                  <li>• Supplier dropdown shows all available suppliers with their prices</li>
+                  <li>• Numbers in blue badges indicate how many suppliers are available for that item</li>
                   <li>• When you export, the system remembers your manual matches for future uploads</li>
-                  <li>• Manually select different suppliers if needed</li>
                   <li>• Click on quantities and prices to edit values</li>
                 </ul>
               </div>
@@ -481,7 +602,7 @@ function PicklistPreview({ results, onExport, onBack }) {
           </div>
 
           {/* Picklist Table */}
-          <div className="overflow-x-auto mb-8">
+          <div className="overflow-x-auto overflow-y-visible mb-8">
             <table className="w-full border-collapse bg-white">
               <thead>
                 <tr className="bg-gray-50">

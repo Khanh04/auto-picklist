@@ -10,6 +10,7 @@ const DatabaseManager = ({ onBack }) => {
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [supplierItems, setSupplierItems] = useState([]);
     const [editingPrice, setEditingPrice] = useState(null); // {supplierId, supplierPriceId, currentPrice}
+    const [newSupplierItem, setNewSupplierItem] = useState({ description: '', price: '' }); // For adding items to specific supplier
 
     // Form states
     const [newSupplier, setNewSupplier] = useState({ name: '' });
@@ -161,6 +162,54 @@ const DatabaseManager = ({ onBack }) => {
                 fetchSuppliers();
             } else {
                 setError(data.error || 'Failed to delete item');
+            }
+        } catch (err) {
+            setError('Network error: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddSupplierItem = async (e) => {
+        e.preventDefault();
+        if (!newSupplierItem.description.trim() || !newSupplierItem.price) {
+            setError('Item description and price are required');
+            return;
+        }
+
+        const price = parseFloat(newSupplierItem.price);
+        if (isNaN(price) || price <= 0) {
+            setError('Price must be a valid positive number');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await fetch('/api/items', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    description: newSupplierItem.description.trim(),
+                    supplier: selectedSupplier.name,
+                    price: price
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setSuccess(`Item "${newSupplierItem.description}" added to ${selectedSupplier.name} successfully!`);
+                setNewSupplierItem({ description: '', price: '' });
+                // Refresh supplier items and suppliers list
+                handleSupplierClick(selectedSupplier);
+                fetchSuppliers();
+            } else {
+                setError(data.error || 'Failed to add item');
             }
         } catch (err) {
             setError('Network error: ' + err.message);
@@ -568,6 +617,7 @@ const DatabaseManager = ({ onBack }) => {
                                                 setSelectedSupplier(null);
                                                 setSupplierItems([]);
                                                 setEditingPrice(null);
+                                                setNewSupplierItem({ description: '', price: '' });
                                             }}
                                             className="text-white hover:bg-white hover:bg-opacity-20 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
                                         >
@@ -578,11 +628,62 @@ const DatabaseManager = ({ onBack }) => {
 
                                 {/* Modal Content */}
                                 <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                                    {/* Add New Item Form */}
+                                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                                        <h4 className="text-lg font-semibold text-gray-800 mb-4">Add New Item to {selectedSupplier.name}</h4>
+                                        <form onSubmit={handleAddSupplierItem} className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label htmlFor="supplierItemDescription" className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Item Description
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        id="supplierItemDescription"
+                                                        value={newSupplierItem.description}
+                                                        onChange={(e) => setNewSupplierItem({ ...newSupplierItem, description: e.target.value })}
+                                                        placeholder="Enter item description"
+                                                        disabled={loading}
+                                                        required
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="supplierItemPrice" className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Price (USD)
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        id="supplierItemPrice"
+                                                        value={newSupplierItem.price}
+                                                        onChange={(e) => setNewSupplierItem({ ...newSupplierItem, price: e.target.value })}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                        disabled={loading}
+                                                        required
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={loading || !newSupplierItem.description.trim() || !newSupplierItem.price}
+                                                    className="px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm"
+                                                >
+                                                    {loading ? 'Adding...' : 'Add Item'}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    {/* Items List */}
                                     {supplierItems.length === 0 ? (
                                         <div className="text-center py-12 text-gray-500">
                                             <div className="text-6xl mb-4">📦</div>
                                             <h4 className="text-xl font-semibold mb-2">No Items Yet</h4>
-                                            <p>This supplier doesn't have any items yet. Add items using the form above.</p>
+                                            <p>This supplier doesn't have any items yet. Use the form above to add the first item.</p>
                                         </div>
                                     ) : (
                                         <div className="overflow-x-auto">
