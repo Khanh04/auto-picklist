@@ -3,12 +3,11 @@ import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
 import DatabaseManager from './components/DatabaseManager'
-import Results from './components/Results'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'database', 'results', 'error'
+  const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'database', 'error'
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -52,40 +51,13 @@ function App() {
     setIsProcessing(false)
   }
 
-  const handleExportPicklist = async (editedResults) => {
-    try {
-      setIsProcessing(true)
-      
-      // Send edited picklist to server for export
-      const response = await fetch('/export', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editedResults)
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        setResults({ ...editedResults, ...result })
-        setCurrentView('results')
-      } else {
-        setError(result.error || 'Failed to export picklist')
-        setCurrentView('error')
-      }
-    } catch (err) {
-      console.error('Export error:', err)
-      setError('Network error during export. Please try again.')
-      setCurrentView('error')
-    } finally {
-      setIsProcessing(false)
-    }
+  // Export is now handled directly in PicklistPreview component
+  // This function is no longer needed but kept for compatibility
+  const handleExportPicklist = () => {
+    // No-op - export handled in preview component
   }
 
-  const handleBackToPreview = () => {
-    setCurrentView('preview')
-  }
+  // Removed handleBackToPreview since Results component is no longer used
 
   const handleManageDatabase = () => {
     setCurrentView('database')
@@ -96,18 +68,20 @@ function App() {
   }
 
   return (
-    <div className="container">
+    <div className="min-h-screen gradient-bg">
       <Header />
-      <main className="main">
+      <main className="flex-1">
         {currentView === 'upload' && (
           <FileUpload onFileUpload={handleFileUpload} onManageDatabase={handleManageDatabase} />
         )}
         
         {currentView === 'processing' && (
-          <div className="upload-section">
-            <div className="process-btn" disabled>
-              <span className="spinner"></span>
-              Processing your file...
+          <div className="max-w-2xl mx-auto p-8">
+            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+              <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
+                <span className="spinner"></span>
+                Processing your file...
+              </div>
             </div>
           </div>
         )}
@@ -122,14 +96,6 @@ function App() {
 
         {currentView === 'database' && (
           <DatabaseManager onBack={handleBackFromDatabase} />
-        )}
-
-        {currentView === 'results' && (
-          <Results 
-            results={results} 
-            onNewUpload={handleReset}
-            onBackToPreview={handleBackToPreview}
-          />
         )}
         
         {currentView === 'error' && (

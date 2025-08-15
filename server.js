@@ -278,6 +278,183 @@ app.post('/api/items', async (req, res) => {
     }
 });
 
+// Get all items for matching
+app.get('/api/items', async (req, res) => {
+    try {
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(`
+            SELECT DISTINCT p.id, p.description,
+                   s.name as supplier_name,
+                   sp.price,
+                   ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY sp.price ASC) as price_rank
+            FROM products p
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            ORDER BY p.description
+        `);
+        
+        // Group by product and get the best price for each
+        const itemsMap = new Map();
+        result.rows.forEach(row => {
+            if (!itemsMap.has(row.id) || row.price_rank === 1) {
+                itemsMap.set(row.id, {
+                    id: row.id,
+                    description: row.description,
+                    bestSupplier: row.supplier_name,
+                    bestPrice: row.price
+                });
+            }
+        });
+        
+        res.json({
+            success: true,
+            items: Array.from(itemsMap.values())
+        });
+    } catch (error) {
+        console.error('Error fetching items:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch items'
+        });
+    }
+});
+
+// Find best match for item
+app.post('/api/match-item', async (req, res) => {
+    try {
+        const { description } = req.body;
+        
+        if (!description || !description.trim()) {
+            return res.status(400).json({
+                success: false,
+                error: 'Item description is required'
+            });
+        }
+        
+        const { findBestSupplier } = require('./src/modules/databaseLoader');
+        const result = await findBestSupplier(description.trim());
+        
+        if (result.supplier && result.price) {
+            res.json({
+                success: true,
+                match: {
+                    supplier: result.supplier,
+                    price: result.price
+                }
+            });
+        } else {
+            res.json({
+                success: false,
+                message: 'No matching item found'
+            });
+        }
+    } catch (error) {
+        console.error('Error matching item:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to match item'
+        });
+    }
+});
+
+// Store user matching preferences for machine learning
+app.post('/api/store-preferences', async (req, res) => {
+    try {
+        const { preferences } = req.body;
+        
+        if (!preferences || !Array.isArray(preferences)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Preferences array is required'
+            });
+        }
+        
+        const { pool } = require('./src/database/config');
+        
+        // Create matching_preferences table if it doesn't exist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS matching_preferences (
+                id SERIAL PRIMARY KEY,
+                original_item TEXT NOT NULL,
+                matched_product_id INTEGER NOT NULL,
+                frequency INTEGER DEFAULT 1,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (matched_product_id) REFERENCES products(id),
+                UNIQUE(original_item, matched_product_id)
+            )
+        `);
+        
+        // Store each preference
+        for (const pref of preferences) {
+            await pool.query(`
+                INSERT INTO matching_preferences (original_item, matched_product_id, frequency, last_used)
+                VALUES ($1, $2, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT (original_item, matched_product_id)
+                DO UPDATE SET 
+                    frequency = matching_preferences.frequency + 1,
+                    last_used = CURRENT_TIMESTAMP
+            `, [pref.originalItem, pref.matchedProductId]);
+        }
+        
+        res.json({
+            success: true,
+            message: `Stored ${preferences.length} matching preferences`
+        });
+    } catch (error) {
+        console.error('Error storing preferences:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to store matching preferences'
+        });
+    }
+});
+
+// Get matching preferences for an item
+app.get('/api/get-preference/:originalItem', async (req, res) => {
+    try {
+        const { originalItem } = req.params;
+        const { pool } = require('./src/database/config');
+        
+        const result = await pool.query(`
+            SELECT mp.matched_product_id, mp.frequency, p.description,
+                   s.name as supplier_name, sp.price
+            FROM matching_preferences mp
+            JOIN products p ON mp.matched_product_id = p.id
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE LOWER(mp.original_item) = LOWER($1)
+            ORDER BY mp.frequency DESC, mp.last_used DESC, sp.price ASC
+            LIMIT 1
+        `, [originalItem]);
+        
+        if (result.rows.length > 0) {
+            res.json({
+                success: true,
+                preference: {
+                    productId: result.rows[0].matched_product_id,
+                    description: result.rows[0].description,
+                    supplier: result.rows[0].supplier_name,
+                    price: result.rows[0].price,
+                    frequency: result.rows[0].frequency
+                }
+            });
+        } else {
+            res.json({
+                success: false,
+                message: 'No preference found'
+            });
+        }
+    } catch (error) {
+        console.error('Error getting preference:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get preference'
+        });
+    }
+});
+
 // Export edited picklist
 app.post('/export', async (req, res) => {
     try {
@@ -401,8 +578,8 @@ function cleanupOldFiles() {
 
 // Start server
 app.listen(port, () => {
-    console.log(`🚀 Auto Picklist Web App running on http://localhost:${port}`);
-    console.log('📁 Upload CSV files to generate optimized pick lists');
+    console.log(`Auto Picklist Web App running on http://localhost:${port}`);
+    console.log('Upload CSV files to generate optimized pick lists');
     
     // Clean up old files on startup
     cleanupOldFiles();

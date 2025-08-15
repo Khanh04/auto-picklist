@@ -81,60 +81,83 @@ function FileUpload({ onFileUpload, onManageDatabase }) {
   }
 
   return (
-    <div className="upload-section">
-      {!selectedFile ? (
-        <div 
-          className={`upload-area ${isDragOver ? 'drag-over' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={handleUploadAreaClick}
-        >
-          <div className="upload-icon">📄</div>
-          <h3>Drop your CSV file here</h3>
-          <p>or <button type="button" className="browse-btn" onClick={handleBrowseClick}>browse files</button></p>
-          <small>Accepts CSV files up to 5MB</small>
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            accept=".csv" 
-            style={{ display: 'none' }}
-            onChange={handleFileInputChange}
-          />
-        </div>
-      ) : (
-        <div className="file-info">
-          <div className="file-details">
-            <span className="file-name">{selectedFile.name}</span>
-            <span className="file-size">{formatFileSize(selectedFile.size)}</span>
+    <div className="max-w-2xl mx-auto p-8">
+      <div className="bg-white rounded-xl shadow-lg p-8">
+        {!selectedFile ? (
+          <div 
+            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-300 ${
+              isDragOver 
+                ? 'border-blue-400 bg-blue-50 scale-105' 
+                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={handleUploadAreaClick}
+          >
+            <div className="text-6xl mb-4">📄</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Drop your CSV file here</h3>
+            <p className="text-gray-600 mb-4">
+              or{' '}
+              <button 
+                type="button" 
+                className="text-blue-600 hover:text-blue-700 font-semibold underline"
+                onClick={handleBrowseClick}
+              >
+                browse files
+              </button>
+            </p>
+            <small className="text-gray-500">Accepts CSV files up to 5MB</small>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              accept=".csv" 
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
           </div>
+        ) : (
+          <div className="bg-gray-50 rounded-lg p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-3xl">📄</div>
+              <div>
+                <div className="font-semibold text-gray-800">{selectedFile.name}</div>
+                <div className="text-sm text-gray-600">{formatFileSize(selectedFile.size)}</div>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              className="text-red-500 hover:text-red-700 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 transition-colors"
+              onClick={handleRemoveFile}
+              title="Remove file"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
           <button 
             type="button" 
-            className="remove-btn"
-            onClick={handleRemoveFile}
+            className={`px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 transform ${
+              selectedFile
+                ? 'gradient-bg text-white hover:scale-105 hover:shadow-lg'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+            disabled={!selectedFile}
+            onClick={handleProcess}
           >
-            ✕
+            📊 Generate Picklist
+          </button>
+          
+          <button 
+            type="button" 
+            className="px-8 py-4 gradient-green text-white rounded-lg font-semibold text-lg hover:scale-105 hover:shadow-lg transition-all duration-300 transform"
+            onClick={onManageDatabase}
+          >
+            🗄️ Manage Database
           </button>
         </div>
-      )}
-
-      <div className="action-buttons">
-        <button 
-          type="button" 
-          className="process-btn"
-          disabled={!selectedFile}
-          onClick={handleProcess}
-        >
-          Generate Picklist
-        </button>
-        
-        <button 
-          type="button" 
-          className="manage-db-btn"
-          onClick={onManageDatabase}
-        >
-          Manage Database
-        </button>
       </div>
     </div>
   )

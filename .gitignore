@@ -4,11 +4,20 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Build output
+public/assets/
+public/index.html
+
 # Output files
 final_picklist.csv
 final_picklist.pdf
-*.csv
-*.pdf
+uploads/*.csv
+uploads/*.pdf
+
+# Exclude sample files but keep structure
+!eBay-OrdersReport-*.csv
+!H\ order.pdf
+!GENERAL\ PRICE\ LIST.xlsx
 
 # OS generated files
 .DS_Store
@@ -37,6 +46,12 @@ logs
 .env.test.local
 .env.production.local
 
+# Database
+*.sql
+
 # Temporary files
 tmp/
 temp/
+
+# Claude settings (optional - keep if you want Claude context)
+.claude/

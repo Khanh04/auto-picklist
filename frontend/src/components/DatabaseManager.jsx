@@ -53,7 +53,7 @@ const DatabaseManager = ({ onBack }) => {
             const data = await response.json();
 
             if (response.ok) {
-                setSuccess(`Supplier "${newSupplier.name}" added successfully!`);
+                setSuccess(`Supplier "${newSupplier.name}" added successfully! 🎉`);
                 setNewSupplier({ name: '' });
                 fetchSuppliers(); // Refresh supplier list
             } else {
@@ -99,7 +99,7 @@ const DatabaseManager = ({ onBack }) => {
             const data = await response.json();
 
             if (response.ok) {
-                setSuccess(`Item "${newItem.description}" added successfully!`);
+                setSuccess(`Item "${newItem.description}" added successfully! 🎉`);
                 setNewItem({ description: '', supplier: '', price: '' });
             } else {
                 setError(data.error || 'Failed to add item');
@@ -112,127 +112,187 @@ const DatabaseManager = ({ onBack }) => {
     };
 
     return (
-        <div className="database-manager">
-            <div className="database-header">
-                <button className="back-button" onClick={onBack}>
-                    ← Back to Upload
-                </button>
-                <h2>Database Management</h2>
-                <p>Add new suppliers and items to the database</p>
-            </div>
-
-            {error && (
-                <div className="error-message">
-                    <span className="error-icon">⚠️</span>
-                    {error}
-                </div>
-            )}
-
-            {success && (
-                <div className="success-message">
-                    <span className="success-icon">✅</span>
-                    {success}
-                </div>
-            )}
-
-            <div className="database-forms">
-                {/* Add Supplier Form */}
-                <div className="form-section">
-                    <h3>Add New Supplier</h3>
-                    <form onSubmit={handleAddSupplier} className="supplier-form">
-                        <div className="form-group">
-                            <label htmlFor="supplierName">Supplier Name:</label>
-                            <input
-                                type="text"
-                                id="supplierName"
-                                value={newSupplier.name}
-                                onChange={(e) => setNewSupplier({ name: e.target.value })}
-                                placeholder="Enter supplier name (e.g., ACME Corp)"
-                                disabled={loading}
-                                required
-                            />
-                        </div>
+        <div className="min-h-screen gradient-bg">
+            <div className="container mx-auto px-4 py-8">
+                <div className="max-w-6xl mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-8">
                         <button 
-                            type="submit" 
-                            className="submit-button"
-                            disabled={loading || !newSupplier.name.trim()}
+                            className="mb-6 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                            onClick={onBack}
                         >
-                            {loading ? 'Adding...' : 'Add Supplier'}
+                            ← Back to Upload
                         </button>
-                    </form>
-                </div>
+                        <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg">
+                            🗄️ Database Management
+                        </h2>
+                        <p className="text-lg text-white opacity-90">
+                            Add new suppliers and items to the database
+                        </p>
+                    </div>
 
-                {/* Add Item Form */}
-                <div className="form-section">
-                    <h3>Add New Item</h3>
-                    <form onSubmit={handleAddItem} className="item-form">
-                        <div className="form-group">
-                            <label htmlFor="itemDescription">Item Description:</label>
-                            <input
-                                type="text"
-                                id="itemDescription"
-                                value={newItem.description}
-                                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                                placeholder="Enter item description (e.g., OPI Nail Polish 0.5 fl oz - Red)"
-                                disabled={loading}
-                                required
-                            />
+                    {/* Alert Messages */}
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
+                            <span className="text-red-500">⚠️</span>
+                            {error}
+                        </div>
+                    )}
+
+                    {success && (
+                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
+                            <span className="text-green-500">✅</span>
+                            {success}
+                        </div>
+                    )}
+
+                    {/* Forms Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        {/* Add Supplier Form */}
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                🏪 Add New Supplier
+                            </h3>
+                            <form onSubmit={handleAddSupplier} className="space-y-4">
+                                <div>
+                                    <label htmlFor="supplierName" className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Supplier Name:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="supplierName"
+                                        value={newSupplier.name}
+                                        onChange={(e) => setNewSupplier({ name: e.target.value })}
+                                        placeholder="Enter supplier name (e.g., ACME Corp)"
+                                        disabled={loading}
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    />
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    disabled={loading || !newSupplier.name.trim()}
+                                    className="w-full gradient-bg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+                                >
+                                    {loading ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <span className="spinner"></span>
+                                            Adding...
+                                        </span>
+                                    ) : (
+                                        '➕ Add Supplier'
+                                    )}
+                                </button>
+                            </form>
                         </div>
 
-                        <div className="form-group">
-                            <label htmlFor="itemSupplier">Supplier:</label>
-                            <select
-                                id="itemSupplier"
-                                value={newItem.supplier}
-                                onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
-                                disabled={loading}
-                                required
-                            >
-                                <option value="">Select a supplier</option>
+                        {/* Add Item Form */}
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                📦 Add New Item
+                            </h3>
+                            <form onSubmit={handleAddItem} className="space-y-4">
+                                <div>
+                                    <label htmlFor="itemDescription" className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Item Description:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="itemDescription"
+                                        value={newItem.description}
+                                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                                        placeholder="Enter item description (e.g., OPI Nail Polish 0.5 fl oz - Red)"
+                                        disabled={loading}
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="itemSupplier" className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Supplier:
+                                    </label>
+                                    <select
+                                        id="itemSupplier"
+                                        value={newItem.supplier}
+                                        onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
+                                        disabled={loading}
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">Select a supplier</option>
+                                        {suppliers.map((supplier) => (
+                                            <option key={supplier.id} value={supplier.name}>
+                                                {supplier.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="itemPrice" className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Price (USD):
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="itemPrice"
+                                        value={newItem.price}
+                                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                                        placeholder="0.00"
+                                        min="0"
+                                        step="0.01"
+                                        disabled={loading}
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    />
+                                </div>
+
+                                <button 
+                                    type="submit" 
+                                    disabled={loading || !newItem.description.trim() || !newItem.supplier || !newItem.price}
+                                    className="w-full gradient-green text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+                                >
+                                    {loading ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <span className="spinner"></span>
+                                            Adding...
+                                        </span>
+                                    ) : (
+                                        '➕ Add Item'
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {/* Current Suppliers List */}
+                    <div className="bg-white rounded-xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            📋 Current Suppliers ({suppliers.length})
+                        </h3>
+                        {suppliers.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                                <div className="text-4xl mb-4">🤷‍♂️</div>
+                                <p>No suppliers found. Add your first supplier above!</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {suppliers.map((supplier) => (
-                                    <option key={supplier.id} value={supplier.name}>
-                                        {supplier.name}
-                                    </option>
+                                    <div 
+                                        key={supplier.id} 
+                                        className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:scale-105 transition-all duration-300"
+                                    >
+                                        <div className="font-semibold text-gray-800 text-lg mb-1">
+                                            {supplier.name}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                            {supplier.product_count || 0} items
+                                        </div>
+                                    </div>
                                 ))}
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label htmlFor="itemPrice">Price (USD):</label>
-                            <input
-                                type="number"
-                                id="itemPrice"
-                                value={newItem.price}
-                                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                                placeholder="0.00"
-                                min="0"
-                                step="0.01"
-                                disabled={loading}
-                                required
-                            />
-                        </div>
-
-                        <button 
-                            type="submit" 
-                            className="submit-button"
-                            disabled={loading || !newItem.description.trim() || !newItem.supplier || !newItem.price}
-                        >
-                            {loading ? 'Adding...' : 'Add Item'}
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            {/* Current Suppliers List */}
-            <div className="suppliers-list">
-                <h3>Current Suppliers ({suppliers.length})</h3>
-                <div className="suppliers-grid">
-                    {suppliers.map((supplier) => (
-                        <div key={supplier.id} className="supplier-card">
-                            <span className="supplier-name">{supplier.name}</span>
-                            <span className="supplier-count">{supplier.product_count || 0} items</span>
-                        </div>
-                    ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

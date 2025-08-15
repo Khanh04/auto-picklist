@@ -28,7 +28,7 @@ class AutoPicklistApp {
      */
     async run() {
         try {
-            console.log('🚀 Starting automated picklist generation...');
+            console.log('Starting automated picklist generation...');
 
             // Load order items (auto-detect input type or use specified)
             let orderItems;
@@ -63,7 +63,7 @@ class AutoPicklistApp {
             if (!orderItems || orderItems.length === 0) {
                 throw new Error('No order items found in input file');
             }
-            console.log(`📄 Loaded ${orderItems.length} order items from ${inputSource}`);
+            console.log(`Loaded ${orderItems.length} order items from ${inputSource}`);
 
             // Load price data (database or Excel)
             let picklist;
@@ -75,10 +75,10 @@ class AutoPicklistApp {
                 }
                 
                 const stats = await getDatabaseStats();
-                console.log(`💾 Using PostgreSQL database (${stats.products} products, ${stats.suppliers} suppliers, ${stats.prices} prices)`);
+                console.log(`Using PostgreSQL database (${stats.products} products, ${stats.suppliers} suppliers, ${stats.prices} prices)`);
                 
                 // Create picklist using database
-                console.log('🔍 Matching items and finding best suppliers...');
+                console.log('Matching items and finding best suppliers...');
                 picklist = await this.createPicklistFromDatabase(orderItems);
             } else {
                 // Use Excel file (legacy mode)
@@ -86,10 +86,10 @@ class AutoPicklistApp {
                 if (!priceData) {
                     throw new Error('Failed to load price list from Excel file');
                 }
-                console.log(`💾 Loaded price list with ${priceData.length} entries (Excel mode)`);
+                console.log(`Loaded price list with ${priceData.length} entries (Excel mode)`);
                 
                 // Create picklist
-                console.log('🔍 Matching items and finding best suppliers...');
+                console.log('Matching items and finding best suppliers...');
                 picklist = createPicklist(orderItems, priceData);
             }
 
@@ -113,7 +113,7 @@ class AutoPicklistApp {
                 }
             };
             
-            console.log(`📊 Returning picklist with ${picklist.length} items`);
+            console.log(`Returning picklist with ${picklist.length} items`);
             return response;
 
         } catch (error) {
@@ -159,10 +159,10 @@ class AutoPicklistApp {
         console.log('\n' + '='.repeat(50));
         console.log('✅ PICKLIST GENERATED SUCCESSFULLY!');
         console.log('='.repeat(50));
-        console.log(`📄 Order items processed: ${totalOrderItems}`);
-        console.log(`💰 Total estimated cost: $${summary.totalCost.toFixed(2)}`);
-        console.log(`🏪 Items with suppliers: ${summary.itemsWithSuppliers}/${summary.totalItems}`);
-        console.log(`📊 Files created:`);
+        console.log(`Order items processed: ${totalOrderItems}`);
+        console.log(`Total estimated cost: $${summary.totalCost.toFixed(2)}`);
+        console.log(`Items with suppliers: ${summary.itemsWithSuppliers}/${summary.totalItems}`);
+        console.log(`Files created:`);
         console.log(`   • ${this.config.csvOutputPath}`);
         console.log(`   • ${this.config.pdfOutputPath}`);
         console.log('='.repeat(50));
