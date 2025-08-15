@@ -320,13 +320,13 @@ const DatabaseManager = ({ onBack }) => {
                         
                         {/* Tabs */}
                         <div className="flex justify-center mt-6">
-                            <div className="bg-white bg-opacity-20 rounded-lg p-1 inline-flex">
+                            <div className="bg-blue bg-opacity-20 rounded-lg p-1 inline-flex">
                                 <button
                                     onClick={() => setActiveTab('manage')}
                                     className={`px-6 py-2 rounded-md font-medium transition-all ${
                                         activeTab === 'manage'
                                             ? 'bg-white text-blue-600 shadow-md'
-                                            : 'text-white hover:bg-white hover:bg-opacity-10'
+                                            : 'text-white hover:bg-blue hover:bg-opacity-10'
                                     }`}
                                 >
                                     Manage Data
@@ -336,7 +336,7 @@ const DatabaseManager = ({ onBack }) => {
                                     className={`px-6 py-2 rounded-md font-medium transition-all ${
                                         activeTab === 'preferences'
                                             ? 'bg-white text-blue-600 shadow-md'
-                                            : 'text-white hover:bg-white hover:bg-opacity-10'
+                                            : 'text-white hover:bg-blue hover:bg-opacity-10'
                                     }`}
                                 >
                                     Item Preferences ({preferences.length})
