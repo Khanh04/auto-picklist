@@ -21,7 +21,7 @@ function normalizeItemName(itemName) {
  */
 async function findBestSupplier(itemName) {
     if (!itemName || itemName.length < 3) {
-        return { supplier: null, price: null };
+        return { supplier: null, price: null, productId: null, description: null };
     }
 
     const client = await pool.connect();
@@ -31,7 +31,7 @@ async function findBestSupplier(itemName) {
         const searchWords = normalizedItem.split(' ').filter(word => word.length > 2);
         
         if (searchWords.length === 0) {
-            return { supplier: null, price: null };
+            return { supplier: null, price: null, productId: null, description: null };
         }
 
         // Strategy 1: Exact substring match (highest priority)
@@ -40,6 +40,7 @@ async function findBestSupplier(itemName) {
                 psp.supplier_name,
                 psp.price,
                 psp.description,
+                psp.product_id,
                 10 as match_score
             FROM product_supplier_prices psp
             WHERE LOWER(psp.description) LIKE $1
@@ -52,20 +53,37 @@ async function findBestSupplier(itemName) {
         if (result.rows.length > 0) {
             const match = result.rows[0];
             console.log(`Match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
-            return { supplier: match.supplier_name, price: parseFloat(match.price) };
+            return { 
+                supplier: match.supplier_name, 
+                price: parseFloat(match.price),
+                productId: match.product_id,
+                description: match.description
+            };
         }
 
-        // Strategy 2: Brand/product name match
+        // Strategy 2: Brand/product name match with category check
         const orderBrand = normalizedItem.split(' ')[0];
         if (orderBrand.length > 2) {
+            // Get main product type from the order item to avoid cross-category matches
+            const isPolishRelated = /polish|gel|lacquer|color|duo/i.test(itemName);
+            const isToolRelated = /brush|tool|dotting|file|buffer/i.test(itemName);
+            
+            let categoryFilter = '';
+            if (isPolishRelated && !isToolRelated) {
+                categoryFilter = `AND (LOWER(psp.description) LIKE '%polish%' OR LOWER(psp.description) LIKE '%gel%' OR LOWER(psp.description) LIKE '%lacquer%')`;
+            } else if (isToolRelated && !isPolishRelated) {
+                categoryFilter = `AND (LOWER(psp.description) LIKE '%brush%' OR LOWER(psp.description) LIKE '%tool%' OR LOWER(psp.description) LIKE '%file%')`;
+            }
+            
             query = `
                 SELECT 
                     psp.supplier_name,
                     psp.price,
                     psp.description,
+                    psp.product_id,
                     5 as match_score
                 FROM product_supplier_prices psp
-                WHERE LOWER(psp.description) LIKE $1
+                WHERE LOWER(psp.description) LIKE $1 ${categoryFilter}
                 ORDER BY psp.price ASC
                 LIMIT 1
             `;
@@ -75,7 +93,12 @@ async function findBestSupplier(itemName) {
             if (result.rows.length > 0) {
                 const match = result.rows[0];
                 console.log(`Brand match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
-                return { supplier: match.supplier_name, price: parseFloat(match.price) };
+                return { 
+                    supplier: match.supplier_name, 
+                    price: parseFloat(match.price),
+                    productId: match.product_id,
+                    description: match.description
+                };
             }
         }
 
@@ -87,6 +110,7 @@ async function findBestSupplier(itemName) {
                     psp.supplier_name,
                     psp.price,
                     psp.description,
+                    psp.product_id,
                     ts_rank(to_tsvector('english', psp.description), to_tsquery('english', $1)) as match_score
                 FROM product_supplier_prices psp
                 WHERE to_tsvector('english', psp.description) @@ to_tsquery('english', $1)
@@ -100,7 +124,12 @@ async function findBestSupplier(itemName) {
                 if (result.rows.length > 0) {
                     const match = result.rows[0];
                     console.log(`Full-text match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
-                    return { supplier: match.supplier_name, price: parseFloat(match.price) };
+                    return { 
+                        supplier: match.supplier_name, 
+                        price: parseFloat(match.price),
+                        productId: match.product_id,
+                        description: match.description
+                    };
                 }
             } catch (error) {
                 // Full-text search might fail with complex queries, continue to next strategy
@@ -110,7 +139,7 @@ async function findBestSupplier(itemName) {
 
         // Strategy 4: Single important word match (lower score)
         const importantWords = searchWords.filter(word => 
-            word.length > 4 && !['nail', 'polish', 'color', 'glue'].includes(word)
+            word.length > 4 && !['nail', 'polish', 'color', 'glue', 'tool', 'brush', 'size'].includes(word)
         );
         
         if (importantWords.length > 0) {
@@ -122,6 +151,7 @@ async function findBestSupplier(itemName) {
                     psp.supplier_name,
                     psp.price,
                     psp.description,
+                    psp.product_id,
                     1 as match_score
                 FROM product_supplier_prices psp
                 WHERE ${wordConditions}
@@ -134,16 +164,21 @@ async function findBestSupplier(itemName) {
             if (result.rows.length > 0) {
                 const match = result.rows[0];
                 console.log(`Word match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
-                return { supplier: match.supplier_name, price: parseFloat(match.price) };
+                return { 
+                    supplier: match.supplier_name, 
+                    price: parseFloat(match.price),
+                    productId: match.product_id,
+                    description: match.description
+                };
             }
         }
 
         // No match found
-        return { supplier: null, price: null };
+        return { supplier: null, price: null, productId: null, description: null };
 
     } catch (error) {
         console.error('Database query error:', error);
-        return { supplier: null, price: null };
+        return { supplier: null, price: null, productId: null, description: null };
     } finally {
         client.release();
     }

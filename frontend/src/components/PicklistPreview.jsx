@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@mui/material'
+import Fuse from 'fuse.js'
 
 function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack }) {
   const [picklist, setPicklist] = useState([])
@@ -11,6 +12,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const [exportResult, setExportResult] = useState(null) // Store export results
   const [isExporting, setIsExporting] = useState(false) // Track export status
   const [preferencesApplied, setPreferencesApplied] = useState(false) // Track if preferences have been applied
+  const [fuseInstance, setFuseInstance] = useState(null) // Fuzzy search instance
 
   useEffect(() => {
     // If we have edited picklist from parent, use that instead of results
@@ -42,12 +44,14 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     
     // Convert results to editable picklist format
     if (results && results.picklist) {
-      // Add matchedItem field to track database item selection
+      // Backend already provides matchedItemId, no need to search for it
       const enrichedPicklist = results.picklist.map(item => ({
         ...item,
-        originalItem: item.item, // Keep original item name
-        matchedItemId: null, // Will be set when we find the matching database item
-        manualOverride: false // Track if user manually selected an item
+        // Backend already provides originalItem, matchedItemId, and manualOverride
+        // Just ensure we have them for consistency
+        originalItem: item.originalItem || item.item,
+        matchedItemId: item.matchedItemId, // Already provided by backend
+        manualOverride: item.manualOverride || false
       }))
       setPicklist(enrichedPicklist)
       
@@ -122,20 +126,14 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
           console.warn('Failed to get preference for', item.originalItem, error)
         }
         
-        // Fall back to automatic matching based on supplier/price for items without preferences
-        const matchedDbItem = availableItemsData.find(dbItem => 
-          dbItem.bestSupplier === item.selectedSupplier &&
-          Math.abs(parseFloat(dbItem.bestPrice) - parseFloat(item.unitPrice)) < 0.01
-        )
-        
-        if (matchedDbItem) {
-          // Fetch suppliers for the automatically matched product
-          fetchProductSuppliers(matchedDbItem.id)
+        // Backend already provided the correct matchedItemId, just use it
+        if (item.matchedItemId) {
+          // Fetch suppliers for the backend-matched product
+          fetchProductSuppliers(item.matchedItemId)
         }
         
         return {
           ...item,
-          matchedItemId: matchedDbItem ? matchedDbItem.id : null,
           learnedMatch: false
         }
       }))
@@ -163,15 +161,28 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       const itemsResponse = await fetch('/api/items')
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json()
-        setAvailableItems(itemsData.items || [])
+        const items = itemsData.items || []
+        setAvailableItems(items)
         
-        // Prepare options for react-select
-        const options = itemsData.items.map(item => ({
+        // Prepare options for matched item selection (only product descriptions)
+        const options = items.map(item => ({
           value: item.id,
-          label: `${item.description} (${item.bestSupplier} - $${item.bestPrice})`,
+          label: item.description, // Only show description, no supplier/price
           item: item // Store full item data for easy access
         }))
         setSelectOptions(options)
+        
+        // Create Fuse instance for fuzzy matching (only product descriptions)
+        const fuseOptions = {
+          keys: [
+            { name: 'item.description', weight: 1.0 } // Only search descriptions
+          ],
+          threshold: 0.6, // 0.0 = perfect match, 1.0 = match anything
+          includeScore: true,
+          minMatchCharLength: 2
+        }
+        const fuse = new Fuse(options, fuseOptions)
+        setFuseInstance(fuse)
         
         // Store items for later preference application
         // Preferences will be applied in a separate useEffect when picklist is ready
@@ -212,7 +223,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       newPicklist[index].unitPrice = ''
       newPicklist[index].totalPrice = 'N/A'
     } else {
-      // Selected an item - fetch all suppliers for this product
+      // Selected a product - fetch all suppliers and default to lowest price
       const selectedItem = selectedOption.item
       newPicklist[index].matchedItemId = selectedItem.id
       newPicklist[index].manualOverride = true
@@ -220,16 +231,14 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       // Fetch suppliers for this product
       const suppliers = await fetchProductSuppliers(selectedItem.id)
       
-      // Set the best price supplier as default, or use preferred if available
-      const preferredSupplier = newPicklist[index].preferredSupplier
-      const supplierToUse = suppliers.find(s => s.supplier_name === preferredSupplier) || suppliers[0]
-      
-      if (supplierToUse) {
-        newPicklist[index].selectedSupplier = supplierToUse.supplier_name
-        newPicklist[index].unitPrice = supplierToUse.price
-        newPicklist[index].totalPrice = (supplierToUse.price * newPicklist[index].quantity).toFixed(2)
+      if (suppliers && suppliers.length > 0) {
+        // Default to lowest price supplier (suppliers are already sorted by price)
+        const defaultSupplier = suppliers[0]
+        newPicklist[index].selectedSupplier = defaultSupplier.supplier_name
+        newPicklist[index].unitPrice = defaultSupplier.price
+        newPicklist[index].totalPrice = (defaultSupplier.price * newPicklist[index].quantity).toFixed(2)
       } else {
-        // Fallback to original best supplier data
+        // Fallback to original data if no specific suppliers found
         newPicklist[index].selectedSupplier = selectedItem.bestSupplier
         newPicklist[index].unitPrice = selectedItem.bestPrice
         newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
@@ -472,12 +481,19 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
             onChange={(event, newValue) => handleSelectChange(newValue, index)}
             options={selectOptions}
             getOptionLabel={(option) => option ? option.item.description : ''}
+            filterOptions={(options, { inputValue }) => {
+              // If no input, show all options
+              if (!inputValue || !fuseInstance) {
+                return options
+              }
+              
+              // Use fuzzy search
+              const results = fuseInstance.search(inputValue)
+              return results.map(result => result.item)
+            }}
             renderOption={(props, option) => (
               <li {...props} key={option.value}>
-                <div>
-                  <div className="font-medium text-gray-900">{option.item.description}</div>
-                  <div className="text-xs text-gray-600">${option.item.bestPrice} - {option.item.bestSupplier}</div>
-                </div>
+                <div className="font-medium text-gray-900">{option.item.description}</div>
               </li>
             )}
             renderInput={(params) => (

@@ -439,7 +439,9 @@ app.post('/api/match-item', async (req, res) => {
                 success: true,
                 match: {
                     supplier: result.supplier,
-                    price: result.price
+                    price: result.price,
+                    productId: result.productId,
+                    description: result.description
                 }
             });
         } else {

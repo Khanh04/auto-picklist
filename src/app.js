@@ -134,14 +134,18 @@ class AutoPicklistApp {
         const picklist = [];
 
         for (const orderItem of orderItems) {
-            const { supplier, price } = await findBestSupplier(orderItem.item);
+            const { supplier, price, productId, description } = await findBestSupplier(orderItem.item);
             
             const picklistItem = {
                 quantity: orderItem.quantity,
                 item: orderItem.item,
+                originalItem: orderItem.item, // Keep original for frontend
                 selectedSupplier: supplier || 'No supplier found',
                 unitPrice: price || 'No price found',
-                totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A'
+                totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A',
+                matchedItemId: productId, // Include the matched product ID from backend
+                matchedDescription: description, // Include the matched description
+                manualOverride: false // Track if user manually selected an item
             };
 
             picklist.push(picklistItem);

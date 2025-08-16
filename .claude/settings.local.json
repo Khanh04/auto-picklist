@@ -15,7 +15,9 @@
       "Bash(npm install:*)",
       "Bash(npx tailwindcss init:*)",
       "Bash(open http://localhost:3000)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(npm test)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
