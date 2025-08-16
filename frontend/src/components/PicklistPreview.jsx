@@ -96,18 +96,32 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
               const matchedProduct = availableItemsData.find(dbItem => dbItem.id === prefResult.preference.productId)
               
               if (matchedProduct) {
-                // Fetch suppliers for this product in the background
-                fetchProductSuppliers(prefResult.preference.productId)
+                // Fetch suppliers for this product and default to lowest price
+                const suppliers = await fetchProductSuppliers(prefResult.preference.productId)
                 
-                return {
-                  ...item,
-                  matchedItemId: prefResult.preference.productId,
-                  selectedSupplier: prefResult.preference.supplier, // Set preferred supplier as default
-                  unitPrice: prefResult.preference.price,
-                  totalPrice: (prefResult.preference.price * item.quantity).toFixed(2),
-                  manualOverride: false, // This is from learned preference, not manual
-                  learnedMatch: true, // Flag to indicate this came from learning
-                  preferredSupplier: prefResult.preference.supplier // Store the preferred supplier separately
+                if (suppliers && suppliers.length > 0) {
+                  // Default to lowest price supplier (suppliers are sorted by price)
+                  const defaultSupplier = suppliers[0]
+                  return {
+                    ...item,
+                    matchedItemId: prefResult.preference.productId,
+                    selectedSupplier: defaultSupplier.supplier_name,
+                    unitPrice: defaultSupplier.price,
+                    totalPrice: (defaultSupplier.price * item.quantity).toFixed(2),
+                    manualOverride: false, // This is from learned preference, not manual
+                    learnedMatch: true // Flag to indicate this came from learning
+                  }
+                } else {
+                  // Fallback to original best supplier data
+                  return {
+                    ...item,
+                    matchedItemId: prefResult.preference.productId,
+                    selectedSupplier: matchedProduct.bestSupplier,
+                    unitPrice: matchedProduct.bestPrice,
+                    totalPrice: (matchedProduct.bestPrice * item.quantity).toFixed(2),
+                    manualOverride: false,
+                    learnedMatch: true
+                  }
                 }
               } else {
                 // Product not found in current available items, just set the match
@@ -116,8 +130,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
                 return {
                   ...item,
                   matchedItemId: prefResult.preference.productId,
-                  learnedMatch: true,
-                  preferredSupplier: prefResult.preference.supplier
+                  learnedMatch: true
                 }
               }
             }
@@ -338,14 +351,12 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     try {
       const summary = calculateSummary()
       
-      // Capture manual overrides for machine learning
+      // Capture manual overrides for machine learning (product matching only)
       const preferences = picklist
         .filter(item => item.manualOverride && item.matchedItemId)
         .map(item => ({
           originalItem: item.originalItem,
-          matchedProductId: item.matchedItemId,
-          supplier: item.selectedSupplier,
-          price: item.unitPrice
+          matchedProductId: item.matchedItemId
         }))
       
       // Store preferences if any manual overrides were made

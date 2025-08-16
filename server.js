@@ -500,14 +500,12 @@ app.post('/api/store-preferences', async (req, res) => {
         
         const { pool } = require('./src/database/config');
         
-        // Create matching_preferences table with supplier and price columns
+        // Create matching_preferences table (product matching only)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS matching_preferences (
                 id SERIAL PRIMARY KEY,
                 original_item TEXT NOT NULL,
                 matched_product_id INTEGER NOT NULL,
-                preferred_supplier TEXT,
-                preferred_price DECIMAL(10,2),
                 frequency INTEGER DEFAULT 1,
                 last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -516,51 +514,25 @@ app.post('/api/store-preferences', async (req, res) => {
             )
         `);
         
-        // Add columns if they don't exist (for existing databases)
+        // Remove supplier columns if they exist (cleanup for existing databases)
         try {
-            await pool.query('ALTER TABLE matching_preferences ADD COLUMN IF NOT EXISTS preferred_supplier TEXT');
-            await pool.query('ALTER TABLE matching_preferences ADD COLUMN IF NOT EXISTS preferred_price DECIMAL(10,2)');
+            await pool.query('ALTER TABLE matching_preferences DROP COLUMN IF EXISTS preferred_supplier');
+            await pool.query('ALTER TABLE matching_preferences DROP COLUMN IF EXISTS preferred_price');
         } catch (alterError) {
-            // Columns might already exist, that's OK
-            console.log('Note: preferred_supplier and preferred_price columns may already exist');
+            // Columns might not exist, that's OK
+            console.log('Note: Supplier columns may not exist to remove');
         }
         
-        // Store each preference with supplier and price info
+        // Store each product matching preference (no supplier data)
         for (const pref of preferences) {
-            // Get the specific supplier and price for this selection
-            let preferredSupplier = null;
-            let preferredPrice = null;
-            
-            if (pref.supplier && pref.price) {
-                preferredSupplier = pref.supplier;
-                preferredPrice = pref.price;
-            } else {
-                // Fallback: get the best price for this product
-                const priceResult = await pool.query(`
-                    SELECT s.name as supplier_name, sp.price
-                    FROM supplier_prices sp
-                    JOIN suppliers s ON sp.supplier_id = s.id
-                    WHERE sp.product_id = $1
-                    ORDER BY sp.price ASC
-                    LIMIT 1
-                `, [pref.matchedProductId]);
-                
-                if (priceResult.rows.length > 0) {
-                    preferredSupplier = priceResult.rows[0].supplier_name;
-                    preferredPrice = priceResult.rows[0].price;
-                }
-            }
-            
             await pool.query(`
-                INSERT INTO matching_preferences (original_item, matched_product_id, preferred_supplier, preferred_price, frequency, last_used)
-                VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP)
+                INSERT INTO matching_preferences (original_item, matched_product_id, frequency, last_used)
+                VALUES ($1, $2, 1, CURRENT_TIMESTAMP)
                 ON CONFLICT (original_item, matched_product_id)
                 DO UPDATE SET 
-                    preferred_supplier = $3,
-                    preferred_price = $4,
                     frequency = matching_preferences.frequency + 1,
                     last_used = CURRENT_TIMESTAMP
-            `, [pref.originalItem, pref.matchedProductId, preferredSupplier, preferredPrice]);
+            `, [pref.originalItem, pref.matchedProductId]);
         }
         
         res.json({
@@ -583,14 +555,9 @@ app.get('/api/preferences', async (req, res) => {
         
         const result = await pool.query(`
             SELECT mp.id, mp.original_item, mp.frequency, mp.last_used, mp.created_at,
-                   p.description as matched_description,
-                   COALESCE(mp.preferred_supplier, s.name) as supplier_name, 
-                   COALESCE(mp.preferred_price, sp.price) as price
+                   p.description as matched_description
             FROM matching_preferences mp
             JOIN products p ON mp.matched_product_id = p.id
-            LEFT JOIN supplier_prices sp ON p.id = sp.product_id
-            LEFT JOIN suppliers s ON sp.supplier_id = s.id
-            WHERE mp.preferred_supplier IS NOT NULL OR sp.id IS NOT NULL
             ORDER BY mp.last_used DESC, mp.frequency DESC
         `);
         
@@ -644,10 +611,9 @@ app.get('/api/get-preference/:originalItem', async (req, res) => {
         const { originalItem } = req.params;
         const { pool } = require('./src/database/config');
         
-        // First, try to get the exact preference with supplier info if we store supplier_price_id
+        // Get the product preference (no supplier data stored)
         let result = await pool.query(`
-            SELECT mp.matched_product_id, mp.frequency, p.description,
-                   mp.preferred_supplier, mp.preferred_price
+            SELECT mp.matched_product_id, mp.frequency, p.description
             FROM matching_preferences mp
             JOIN products p ON mp.matched_product_id = p.id
             WHERE LOWER(mp.original_item) = LOWER($1)
@@ -655,46 +621,15 @@ app.get('/api/get-preference/:originalItem', async (req, res) => {
             LIMIT 1
         `, [originalItem]);
         
-        if (result.rows.length > 0 && result.rows[0].preferred_supplier && result.rows[0].preferred_price) {
-            // We have stored supplier preference
+        if (result.rows.length > 0) {
             res.json({
                 success: true,
                 preference: {
                     productId: result.rows[0].matched_product_id,
                     description: result.rows[0].description,
-                    supplier: result.rows[0].preferred_supplier,
-                    price: result.rows[0].preferred_price,
                     frequency: result.rows[0].frequency
                 }
             });
-        } else if (result.rows.length > 0) {
-            // Fallback: find the best price for this product
-            const priceResult = await pool.query(`
-                SELECT s.name as supplier_name, sp.price
-                FROM supplier_prices sp
-                JOIN suppliers s ON sp.supplier_id = s.id
-                WHERE sp.product_id = $1
-                ORDER BY sp.price ASC
-                LIMIT 1
-            `, [result.rows[0].matched_product_id]);
-            
-            if (priceResult.rows.length > 0) {
-                res.json({
-                    success: true,
-                    preference: {
-                        productId: result.rows[0].matched_product_id,
-                        description: result.rows[0].description,
-                        supplier: priceResult.rows[0].supplier_name,
-                        price: priceResult.rows[0].price,
-                        frequency: result.rows[0].frequency
-                    }
-                });
-            } else {
-                res.json({
-                    success: false,
-                    message: 'No preference found'
-                });
-            }
         } else {
             res.json({
                 success: false,

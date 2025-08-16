@@ -524,8 +524,8 @@ const DatabaseManager = ({ onBack }) => {
                                 Item Matching Preferences
                             </h3>
                             <p className="text-gray-600 mb-6">
-                                These are learned preferences from your previous manual item selections. 
-                                The system will automatically apply these matches in future uploads.
+                                These are learned product matching preferences from your previous manual selections. 
+                                The system will automatically match these products in future uploads and default to the lowest price supplier.
                             </p>
                             
                             {preferences.length === 0 ? (
@@ -544,8 +544,6 @@ const DatabaseManager = ({ onBack }) => {
                                             <tr className="bg-gray-50">
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Original Item</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Matched To</th>
-                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Supplier</th>
-                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Price</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Used</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Last Used</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Actions</th>
@@ -563,16 +561,6 @@ const DatabaseManager = ({ onBack }) => {
                                                         <div className="text-gray-900 max-w-xs">
                                                             {pref.matched_description}
                                                         </div>
-                                                    </td>
-                                                    <td className="border border-gray-200 p-3">
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                            {pref.supplier_name}
-                                                        </span>
-                                                    </td>
-                                                    <td className="border border-gray-200 p-3">
-                                                        <span className="font-medium text-green-600">
-                                                            ${pref.price}
-                                                        </span>
                                                     </td>
                                                     <td className="border border-gray-200 p-3 text-center">
                                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
