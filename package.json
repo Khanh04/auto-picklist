@@ -4,10 +4,11 @@
   "description": "Modern React web application for automated picklist generation with PostgreSQL database and intelligent supplier matching",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "web": "node server.js",
+    "start": "node server.js",
+    "start:legacy": "node server-legacy.js",
     "dev": "node src/app.js",
     "dev-web": "concurrently \"npm run build:watch\" \"npm run web\"",
+    "web": "node server.js",
     "build": "vite build",
     "build:watch": "vite build --watch",
     "legacy": "node create_picklist.js",
@@ -15,7 +16,11 @@
     "import-data": "node scripts/import-excel-data.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "docker:build": "docker build -t auto-picklist .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
   },
   "keywords": [
     "react",
