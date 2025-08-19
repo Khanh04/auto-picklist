@@ -15,10 +15,11 @@ const dbConfig = {
 // Create connection pool
 const pool = new Pool(dbConfig);
 
-// Handle pool errors
+// Handle pool errors gracefully
 pool.on('error', (err) => {
-    console.error('Unexpected error on idle PostgreSQL client', err);
-    process.exit(-1);
+    console.error('Unexpected error on idle PostgreSQL client', err.message);
+    // Don't exit process on database errors - let the application handle it
+    // process.exit(-1);
 });
 
 module.exports = {

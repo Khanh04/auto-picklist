@@ -148,21 +148,21 @@ app.post('/export', async (req, res) => {
             item: row.matchedDescription || row.item
         }));
 
-        // Convert picklist to CSV
+        // Convert picklist to CSV with proper data sanitization
         const csvHeaders = 'quantity,item,selectedSupplier,unitPrice,totalPrice\n';
         const csvRows = processedPicklist.map(row => {
             const values = [
-                row.quantity,
-                `"${(row.item || '').replace(/"/g, '""')}"`, // Escape quotes
-                row.selectedSupplier || '',
-                row.unitPrice || '',
-                row.totalPrice || ''
+                (row.quantity || 0).toString(),
+                `"${(row.item || '').replace(/"/g, '""').replace(/[\r\n]/g, ' ')}"`, // Escape quotes and newlines
+                `"${(row.selectedSupplier || '').replace(/"/g, '""')}"`,
+                (row.unitPrice || '').toString(),
+                (row.totalPrice || '').toString()
             ];
             return values.join(',');
         });
         const csvContent = csvHeaders + csvRows.join('\n');
         
-        require('fs').writeFileSync(csvOutputPath, csvContent);
+        require('fs').writeFileSync(csvOutputPath, csvContent, 'utf8');
 
         // Generate PDF using existing module
         const { generatePDF } = require('./src/modules/pdfGenerator');
@@ -177,7 +177,8 @@ app.post('/export', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Export error:', error);
+        console.error('Export error:', error.message);
+        // Security: Don't expose internal error details
         res.status(500).json({ error: 'Failed to export picklist' });
     }
 });
@@ -185,6 +186,22 @@ app.post('/export', async (req, res) => {
 // Download route for exported files
 app.get('/download/:type/:filename', (req, res) => {
     const { type, filename } = req.params;
+    
+    // Security: Validate file type parameter
+    if (!['pdf', 'csv'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid file type' });
+    }
+    
+    // Security: Validate filename to prevent path traversal attacks
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid filename' });
+    }
+    
+    // Security: Only allow files that match our expected pattern
+    if (!/^output-\d+\.(pdf|csv)$/.test(filename)) {
+        return res.status(400).json({ error: 'Invalid filename format' });
+    }
+    
     const filePath = path.join(__dirname, 'uploads', filename);
 
     if (!require('fs').existsSync(filePath)) {

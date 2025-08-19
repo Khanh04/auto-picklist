@@ -32,9 +32,26 @@ const validateFileUpload = (options = {}) => {
                 return next(new AppError(`File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`, 400));
             }
 
-            // Check for malicious file names
+            // Check for malicious file names and extensions
             if (/[<>:"/\\|?*]/.test(req.file.originalname)) {
                 return next(new AppError('Invalid file name characters', 400));
+            }
+            
+            // Validate file extension matches mime type
+            const fileExtension = req.file.originalname.toLowerCase().split('.').pop();
+            const expectedExtensions = {
+                'text/csv': ['csv'],
+                'application/pdf': ['pdf']
+            };
+            
+            if (expectedExtensions[req.file.mimetype] && 
+                !expectedExtensions[req.file.mimetype].includes(fileExtension)) {
+                return next(new AppError('File extension does not match file type', 400));
+            }
+            
+            // Additional security: check for null bytes
+            if (req.file.originalname.includes('\x00')) {
+                return next(new AppError('Invalid file name', 400));
             }
         }
 
@@ -189,13 +206,14 @@ const rateLimit = (options = {}) => {
     } = options;
 
     const requests = new Map();
+    const MAX_IPS = 10000; // Prevent memory leaks
 
     return (req, res, next) => {
         const ip = req.ip || req.connection.remoteAddress;
         const now = Date.now();
         const windowStart = now - windowMs;
 
-        // Clean old entries
+        // Clean old entries and prevent memory leaks
         for (const [key, timestamps] of requests.entries()) {
             const validTimestamps = timestamps.filter(ts => ts > windowStart);
             if (validTimestamps.length === 0) {
@@ -203,6 +221,12 @@ const rateLimit = (options = {}) => {
             } else {
                 requests.set(key, validTimestamps);
             }
+        }
+        
+        // Prevent memory leaks by limiting stored IPs
+        if (requests.size > MAX_IPS) {
+            const oldestKey = requests.keys().next().value;
+            requests.delete(oldestKey);
         }
 
         // Check current IP
