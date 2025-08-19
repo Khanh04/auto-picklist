@@ -21,9 +21,27 @@ async function importExcelData() {
     try {
         console.log('📊 Starting Excel data import...');
         
-        // Read Excel file
-        const excelFile = 'GENERAL PRICE LIST.xlsx';
+        // Verify database schema exists
+        console.log('🔍 Verifying database schema...');
+        const tableCheck = await client.query(`
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public' AND table_name IN ('suppliers', 'products', 'supplier_prices')
+        `);
+        
+        if (tableCheck.rows.length < 3) {
+            throw new Error('❌ Database schema not found. Please run: npm run setup-db');
+        }
+        console.log('✅ Database schema verified');
+        
+        // Read Excel file with better error handling
+        const excelFile = process.env.EXCEL_FILE || 'GENERAL PRICE LIST.xlsx';
         console.log(`📖 Reading ${excelFile}...`);
+        
+        // Check if file exists
+        const fs = require('fs');
+        if (!fs.existsSync(excelFile)) {
+            throw new Error(`❌ Excel file not found: ${excelFile}\n💡 Please ensure the file exists in the project root directory`);
+        }
         
         const workbook = XLSX.readFile(excelFile);
         const sheetName = workbook.SheetNames[0];
