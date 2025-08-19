@@ -688,7 +688,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
                       {renderEditableCell(item, index, 'originalItem', item.originalItem)}
                     </td>
                     <td className="border border-gray-200 max-w-md">
-                      {renderEditableCell(item, index, 'matchedItem', item.matchedItem)}
+                      {renderEditableCell(item, index, 'matchedItem', item.matchedDescription)}
                     </td>
                     <td className="border border-gray-200">
                       {renderEditableCell(item, index, 'selectedSupplier', item.selectedSupplier)}

@@ -49,10 +49,11 @@ async function findBestSupplier(itemName) {
         `;
         
         let result = await client.query(query, [`%${normalizedItem.substring(0, 15)}%`]);
+        console.log(`Strategy 1 for "${itemName}": searching for "%${normalizedItem.substring(0, 15)}%", found ${result.rows.length} results`);
         
         if (result.rows.length > 0) {
             const match = result.rows[0];
-            console.log(`Match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
+            console.log(`Strategy 1 match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
             return { 
                 supplier: match.supplier_name, 
                 price: parseFloat(match.price),
@@ -137,14 +138,23 @@ async function findBestSupplier(itemName) {
             }
         }
 
-        // Strategy 4: Single important word match (lower score)
-        const importantWords = searchWords.filter(word => 
-            word.length > 4 && !['nail', 'polish', 'color', 'glue', 'tool', 'brush', 'size'].includes(word)
-        );
+        // Strategy 4: Brand-specific match (for known brands)
+        const knownBrands = ['dnd', 'opi', 'essie', 'cnd', 'gelish', 'orly', 'china', 'glaze'];
+        const detectedBrand = searchWords.find(word => 
+            knownBrands.some(brand => 
+                word.includes(brand) || brand.includes(word) || word.toLowerCase().includes(brand.toLowerCase())
+            )
+        ) || knownBrands.find(brand => normalizedItem.includes(brand));
         
-        if (importantWords.length > 0) {
-            const wordConditions = importantWords.map((_, index) => `LOWER(psp.description) LIKE $${index + 1}`).join(' OR ');
-            const wordParams = importantWords.map(word => `%${word}%`);
+        console.log(`Debug for "${itemName}": searchWords=${JSON.stringify(searchWords)}, detectedBrand=${detectedBrand}`);
+        
+        if (detectedBrand) {
+            // For brand matches, require the brand to be in the result
+            // Use the clean brand name for searching, not the detected word
+            const brandToSearch = knownBrands.find(brand => 
+                (detectedBrand && detectedBrand.toLowerCase().includes(brand.toLowerCase())) || 
+                normalizedItem.includes(brand)
+            ) || detectedBrand;
             
             query = `
                 SELECT 
@@ -152,24 +162,67 @@ async function findBestSupplier(itemName) {
                     psp.price,
                     psp.description,
                     psp.product_id,
-                    1 as match_score
+                    2 as match_score
                 FROM product_supplier_prices psp
-                WHERE ${wordConditions}
+                WHERE LOWER(psp.description) LIKE $1
                 ORDER BY psp.price ASC
                 LIMIT 1
             `;
             
-            result = await client.query(query, wordParams);
+            result = await client.query(query, [`%${brandToSearch}%`]);
             
             if (result.rows.length > 0) {
                 const match = result.rows[0];
-                console.log(`Word match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
+                console.log(`Brand-specific match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
                 return { 
                     supplier: match.supplier_name, 
                     price: parseFloat(match.price),
                     productId: match.product_id,
                     description: match.description
                 };
+            }
+        }
+        
+        // Strategy 5: Important word match with category similarity (more restrictive)
+        const importantWords = searchWords.filter(word => 
+            word.length > 4 && !['nail', 'color', 'glue', 'tool', 'brush', 'size', 'pack', 'sample', 'chart'].includes(word)
+        );
+        
+        if (importantWords.length > 0) {
+            // Only match if at least 2 important words match OR 1 very specific word
+            const verySpecificWords = importantWords.filter(word => word.length > 6);
+            const shouldUseStrictMatch = verySpecificWords.length > 0;
+            
+            if (shouldUseStrictMatch) {
+                // Require at least one very specific word match
+                const wordConditions = verySpecificWords.map((_, index) => `LOWER(psp.description) LIKE $${index + 1}`).join(' OR ');
+                const wordParams = verySpecificWords.map(word => `%${word}%`);
+                
+                query = `
+                    SELECT 
+                        psp.supplier_name,
+                        psp.price,
+                        psp.description,
+                        psp.product_id,
+                        1 as match_score
+                    FROM product_supplier_prices psp
+                    WHERE ${wordConditions}
+                    ORDER BY psp.price ASC
+                    LIMIT 1
+                `;
+                
+                result = await client.query(query, wordParams);
+                
+                if (result.rows.length > 0) {
+                    const match = result.rows[0];
+                    console.log(`Specific word match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
+                    return { 
+                        supplier: match.supplier_name, 
+                        price: parseFloat(match.price),
+                        productId: match.product_id,
+                        description: match.description
+                    };
+                }
             }
         }
 

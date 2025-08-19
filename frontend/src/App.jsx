@@ -34,16 +34,19 @@ function App() {
 
     try {
       const formData = new FormData()
-      formData.append('csvFile', file)
+      formData.append('file', file)
+      formData.append('useDatabase', 'true')
 
-      const response = await fetch('/upload', {
+      const response = await fetch('/api/picklist/upload', {
         method: 'POST',
         body: formData
       })
 
       const result = await response.json()
+      console.log('Upload result:', result)
 
       if (result.success) {
+        console.log('Picklist items:', result.picklist)
         setResults(result)
         setEditedPicklist(null) // Reset edited picklist for new upload
         setCurrentView('upload') // Stay on upload tab but show preview

@@ -173,6 +173,60 @@ class AutoPicklistApp {
     }
 
     /**
+     * Parse PDF file and return order items
+     * @param {string} filePath - Path to PDF file
+     * @returns {Promise<Array>} Array of order items
+     */
+    async parsePDF(filePath) {
+        return await parseOrderItemsFromPDF(filePath);
+    }
+
+    /**
+     * Parse CSV file and return order items
+     * @param {string} filePath - Path to CSV file
+     * @returns {Promise<Array>} Array of order items
+     */
+    async parseCSV(filePath) {
+        return await parseOrderItemsFromEbayCSV(filePath);
+    }
+
+    /**
+     * Process PDF file using legacy Excel matching
+     * @param {string} filePath - Path to PDF file
+     * @returns {Promise<Object>} Result object with picklist
+     */
+    async processPDF(filePath) {
+        const orderItems = await parseOrderItemsFromPDF(filePath);
+        const priceData = loadPriceList(this.config.excelInputPath);
+        const picklist = createPicklist(orderItems, priceData);
+        
+        return {
+            success: true,
+            picklist,
+            picklistData: picklist,
+            summary: calculateSummary(picklist)
+        };
+    }
+
+    /**
+     * Process CSV file using legacy Excel matching
+     * @param {string} filePath - Path to CSV file
+     * @returns {Promise<Object>} Result object with picklist
+     */
+    async processCSV(filePath) {
+        const orderItems = await parseOrderItemsFromEbayCSV(filePath);
+        const priceData = loadPriceList(this.config.excelInputPath);
+        const picklist = createPicklist(orderItems, priceData);
+        
+        return {
+            success: true,
+            picklist,
+            picklistData: picklist,
+            summary: calculateSummary(picklist)
+        };
+    }
+
+    /**
      * Get configuration
      * @returns {Object} Current configuration
      */
