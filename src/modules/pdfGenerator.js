@@ -186,9 +186,9 @@ function drawTableRow(doc, rowData, y, index, supplierName) {
 /**
  * Generate PDF from picklist data
  * @param {Array} picklistData - Array of picklist items
- * @param {string} outputPath - Output file path
+ * @param {string|Object} output - Output file path or stream (for streaming)
  */
-function generatePDF(picklistData, outputPath = 'final_picklist.pdf') {
+function generatePDF(picklistData, output = 'final_picklist.pdf') {
     // Input validation
     if (!Array.isArray(picklistData)) {
         throw new Error('picklistData must be an array');
@@ -199,7 +199,14 @@ function generatePDF(picklistData, outputPath = 'final_picklist.pdf') {
     }
     
     const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(fs.createWriteStream(outputPath));
+    
+    // Support both file paths and streams
+    if (typeof output === 'string') {
+        doc.pipe(fs.createWriteStream(output));
+    } else {
+        // Assume it's a stream (like res object)
+        doc.pipe(output);
+    }
     
     // Add title and date
     doc.fontSize(20).text('AUTO-GENERATED PICKLIST', { align: 'center' });
@@ -236,7 +243,11 @@ function generatePDF(picklistData, outputPath = 'final_picklist.pdf') {
     });
     
     doc.end();
-    console.log(`PDF picklist saved to "${outputPath}"`);
+    
+    // Only log to console if we're writing to a file
+    if (typeof output === 'string') {
+        console.log(`PDF picklist saved to "${output}"`);
+    }
 }
 
 module.exports = {

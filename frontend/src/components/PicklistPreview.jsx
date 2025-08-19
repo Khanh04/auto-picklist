@@ -400,9 +400,11 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       })
 
       const result = await response.json()
+      console.log('Export response:', result)
 
       if (result.success) {
         setExportResult(result)
+        console.log('Export result set:', result)
         
         // Learning preferences stored for future use
       } else {
@@ -715,18 +717,18 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
               <p className="text-green-700 mb-4">Your picklist has been generated and is ready for download.</p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {exportResult.csvPath && (
+                {exportResult.csvUrl && (
                   <a
-                    href={`/download/csv/${exportResult.csvPath.split('/').pop()}`}
+                    href={exportResult.csvUrl}
                     className="flex items-center justify-center gap-3 bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition-colors font-semibold"
                     download
                   >
                     Download CSV
                   </a>
                 )}
-                {exportResult.pdfPath && (
+                {exportResult.pdfUrl && (
                   <a
-                    href={`/download/pdf/${exportResult.pdfPath.split('/').pop()}`}
+                    href={exportResult.pdfUrl}
                     className="flex items-center justify-center gap-3 bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors font-semibold"
                     download
                   >

@@ -128,7 +128,7 @@ app.post('/api/match-item', (req, res, next) => {
     itemsRoutes(req, res, next);
 });
 
-// Export route for frontend compatibility
+// Export route - returns download URLs for on-the-fly generation
 app.post('/export', async (req, res) => {
     try {
         const { picklist, summary } = req.body;
@@ -137,10 +137,6 @@ app.post('/export', async (req, res) => {
             return res.status(400).json({ error: 'Invalid picklist data' });
         }
 
-        const timestamp = Date.now();
-        const csvOutputPath = `uploads/output-${timestamp}.csv`;
-        const pdfOutputPath = `uploads/output-${timestamp}.pdf`;
-
         // Prepare picklist data with matched items for better display
         const processedPicklist = picklist.map(row => ({
             ...row,
@@ -148,86 +144,90 @@ app.post('/export', async (req, res) => {
             item: row.matchedDescription || row.item
         }));
 
-        // Convert picklist to CSV with proper data sanitization
-        const csvHeaders = 'quantity,item,selectedSupplier,unitPrice,totalPrice\n';
-        const csvRows = processedPicklist.map(row => {
-            const values = [
-                (row.quantity || 0).toString(),
-                `"${(row.item || '').replace(/"/g, '""').replace(/[\r\n]/g, ' ')}"`, // Escape quotes and newlines
-                `"${(row.selectedSupplier || '').replace(/"/g, '""')}"`,
-                (row.unitPrice || '').toString(),
-                (row.totalPrice || '').toString()
-            ];
-            return values.join(',');
-        });
-        const csvContent = csvHeaders + csvRows.join('\n');
+        // Generate unique identifier for this export session
+        const exportId = Date.now().toString();
         
-        require('fs').writeFileSync(csvOutputPath, csvContent, 'utf8');
-
-        // Generate PDF using existing module
-        const { generatePDF } = require('./src/modules/pdfGenerator');
-        generatePDF(processedPicklist, pdfOutputPath);
-
-        res.json({
-            success: true,
-            message: 'Picklist exported successfully!',
-            csvPath: csvOutputPath,
-            pdfPath: pdfOutputPath,
-            summary: summary
+        // Store the processed picklist temporarily in memory for download generation
+        // This is more secure than file storage and automatically cleaned up
+        global.exportCache = global.exportCache || new Map();
+        global.exportCache.set(exportId, {
+            data: processedPicklist,
+            timestamp: Date.now()
         });
+        
+        // Clean old cache entries (older than 10 minutes)
+        const cleanupTime = Date.now() - (10 * 60 * 1000);
+        for (const [key, value] of global.exportCache.entries()) {
+            if (value.timestamp < cleanupTime) {
+                global.exportCache.delete(key);
+            }
+        }
+
+        const response = {
+            success: true,
+            message: 'Picklist ready for download!',
+            csvUrl: `/download/csv/${exportId}`,
+            pdfUrl: `/download/pdf/${exportId}`,
+            summary: summary
+        };
+        
+        console.log('Sending export response:', response);
+        res.json(response);
 
     } catch (error) {
         console.error('Export error:', error.message);
-        // Security: Don't expose internal error details
-        res.status(500).json({ error: 'Failed to export picklist' });
+        res.status(500).json({ error: 'Failed to prepare export' });
     }
 });
 
-// Download route for exported files
-app.get('/download/:type/:filename', (req, res) => {
-    const { type, filename } = req.params;
+// On-the-fly download route
+app.get('/download/:type/:exportId', (req, res) => {
+    const { type, exportId } = req.params;
     
     // Security: Validate file type parameter
     if (!['pdf', 'csv'].includes(type)) {
         return res.status(400).json({ error: 'Invalid file type' });
     }
     
-    // Security: Validate filename to prevent path traversal attacks
-    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-        return res.status(400).json({ error: 'Invalid filename' });
+    // Security: Validate exportId (should be numeric timestamp)
+    if (!/^\d+$/.test(exportId)) {
+        return res.status(400).json({ error: 'Invalid export ID' });
     }
     
-    // Security: Only allow files that match our expected pattern
-    if (!/^output-\d+\.(pdf|csv)$/.test(filename)) {
-        return res.status(400).json({ error: 'Invalid filename format' });
+    // Get data from cache
+    const exportCache = global.exportCache || new Map();
+    const cacheEntry = exportCache.get(exportId);
+    
+    if (!cacheEntry) {
+        return res.status(404).json({ error: 'Export data not found or expired' });
     }
     
-    const filePath = path.join(__dirname, 'uploads', filename);
-
-    if (!require('fs').existsSync(filePath)) {
-        return res.status(404).json({ error: 'File not found' });
-    }
-
-    // Set appropriate headers based on file type
-    if (type === 'pdf') {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="picklist-${Date.now()}.pdf"`);
-    } else if (type === 'csv') {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="picklist-${Date.now()}.csv"`);
-    }
-
-    // Send file and clean up after download
-    res.sendFile(filePath, (err) => {
-        if (!err) {
-            // Delete file after successful download
-            setTimeout(() => {
-                if (require('fs').existsSync(filePath)) {
-                    require('fs').unlinkSync(filePath);
-                }
-            }, 1000); // 1 second delay to ensure download completes
+    try {
+        const { data: picklistData } = cacheEntry;
+        const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+        
+        if (type === 'csv') {
+            // Generate and stream CSV
+            const { streamCSV } = require('./src/modules/csvGenerator');
+            streamCSV(picklistData, res, `picklist-${timestamp}.csv`);
+            
+        } else if (type === 'pdf') {
+            // Generate and stream PDF
+            const { generatePDF } = require('./src/modules/pdfGenerator');
+            
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="picklist-${timestamp}.pdf"`);
+            
+            generatePDF(picklistData, res);
         }
-    });
+        
+        // Clean up this cache entry after use
+        exportCache.delete(exportId);
+        
+    } catch (error) {
+        console.error('Download error:', error.message);
+        res.status(500).json({ error: 'Failed to generate download' });
+    }
 });
 
 // Serve static files (frontend)
