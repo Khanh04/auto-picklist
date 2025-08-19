@@ -128,6 +128,91 @@ app.post('/api/match-item', (req, res, next) => {
     itemsRoutes(req, res, next);
 });
 
+// Export route for frontend compatibility
+app.post('/export', async (req, res) => {
+    try {
+        const { picklist, summary } = req.body;
+
+        if (!picklist || !Array.isArray(picklist)) {
+            return res.status(400).json({ error: 'Invalid picklist data' });
+        }
+
+        const timestamp = Date.now();
+        const csvOutputPath = `uploads/output-${timestamp}.csv`;
+        const pdfOutputPath = `uploads/output-${timestamp}.pdf`;
+
+        // Prepare picklist data with matched items for better display
+        const processedPicklist = picklist.map(row => ({
+            ...row,
+            // Use matched description if available, otherwise use original item
+            item: row.matchedDescription || row.item
+        }));
+
+        // Convert picklist to CSV
+        const csvHeaders = 'quantity,item,selectedSupplier,unitPrice,totalPrice\n';
+        const csvRows = processedPicklist.map(row => {
+            const values = [
+                row.quantity,
+                `"${(row.item || '').replace(/"/g, '""')}"`, // Escape quotes
+                row.selectedSupplier || '',
+                row.unitPrice || '',
+                row.totalPrice || ''
+            ];
+            return values.join(',');
+        });
+        const csvContent = csvHeaders + csvRows.join('\n');
+        
+        require('fs').writeFileSync(csvOutputPath, csvContent);
+
+        // Generate PDF using existing module
+        const { generatePDF } = require('./src/modules/pdfGenerator');
+        generatePDF(processedPicklist, pdfOutputPath);
+
+        res.json({
+            success: true,
+            message: 'Picklist exported successfully!',
+            csvPath: csvOutputPath,
+            pdfPath: pdfOutputPath,
+            summary: summary
+        });
+
+    } catch (error) {
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'Failed to export picklist' });
+    }
+});
+
+// Download route for exported files
+app.get('/download/:type/:filename', (req, res) => {
+    const { type, filename } = req.params;
+    const filePath = path.join(__dirname, 'uploads', filename);
+
+    if (!require('fs').existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Set appropriate headers based on file type
+    if (type === 'pdf') {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="picklist-${Date.now()}.pdf"`);
+    } else if (type === 'csv') {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="picklist-${Date.now()}.csv"`);
+    }
+
+    // Send file and clean up after download
+    res.sendFile(filePath, (err) => {
+        if (!err) {
+            // Delete file after successful download
+            setTimeout(() => {
+                if (require('fs').existsSync(filePath)) {
+                    require('fs').unlinkSync(filePath);
+                }
+            }, 1000); // 1 second delay to ensure download completes
+        }
+    });
+});
+
 // Serve static files (frontend)
 app.use(express.static(config.paths.public));
 
