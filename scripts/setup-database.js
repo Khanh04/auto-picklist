@@ -9,6 +9,8 @@ const serverPool = new Pool({
     database: 'postgres' // Connect to default postgres database
 });
 
+console.log(`🔌 Connecting as user: ${process.env.DB_USER || process.env.USER || 'postgres'}`);
+
 async function setupDatabase() {
     const dbName = process.env.DB_NAME || 'autopicklist';
     

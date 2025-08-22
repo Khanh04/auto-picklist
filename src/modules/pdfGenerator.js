@@ -132,9 +132,11 @@ function drawTableHeader(doc, yPos) {
  * @returns {Array} Formatted row data
  */
 function formatRowData(item) {
+    // Use originalItem if available, otherwise fall back to item
+    const itemName = item.originalItem || item.item;
     return [
         (item.quantity || 0).toString(),
-        item.item ? (item.item.length > 50 ? item.item.substring(0, 47) + '...' : item.item) : '',
+        itemName ? (itemName.length > 50 ? itemName.substring(0, 47) + '...' : itemName) : '',
         item.selectedSupplier || 'No supplier found',
         typeof item.unitPrice === 'number' ? `$${item.unitPrice.toFixed(2)}` : (item.unitPrice || 'N/A'),
         typeof item.totalPrice === 'string' && item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : (item.totalPrice || 'N/A')
