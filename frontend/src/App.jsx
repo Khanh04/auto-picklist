@@ -5,6 +5,8 @@ import { Upload, Preview, Storage } from '@mui/icons-material'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
+import ShoppingList from './components/ShoppingList'
+import SharedShoppingList from './components/SharedShoppingList'
 import DatabaseManager from './components/DatabaseManager'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
@@ -21,11 +23,25 @@ const theme = createTheme({
 })
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload') // 'upload', 'processing', 'preview', 'database', 'error'
+  const [currentView, setCurrentView] = useState(() => {
+    // Check if this is a shared shopping list URL
+    const path = window.location.pathname;
+    const shareMatch = path.match(/^\/shopping\/([a-f0-9]+)$/);
+    if (shareMatch) {
+      return 'shared-shopping';
+    }
+    return 'upload';
+  }); // 'upload', 'processing', 'preview', 'shopping', 'shared-shopping', 'database', 'error'
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [editedPicklist, setEditedPicklist] = useState(null) // Store edited picklist state
+  const [shareId, setShareId] = useState(() => {
+    // Extract share ID from URL
+    const path = window.location.pathname;
+    const shareMatch = path.match(/^\/shopping\/([a-f0-9]+)$/);
+    return shareMatch ? shareMatch[1] : null;
+  });
 
   const handleFileUpload = async (file) => {
     setIsProcessing(true)
@@ -89,6 +105,19 @@ function App() {
     setEditedPicklist(updatedPicklist)
   }
 
+  // Don't show header and footer for shared shopping lists
+  if (currentView === 'shared-shopping') {
+    return (
+      <SharedShoppingList 
+        shareId={shareId} 
+        onError={(error) => {
+          setError(error);
+          setCurrentView('error');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen gradient-bg">
       <Header currentView={currentView} onNavigate={handleNavigate} />
@@ -104,6 +133,7 @@ function App() {
             onPicklistUpdate={handlePicklistUpdate}
             onExport={handleExportPicklist}
             onBack={handleReset}
+            onNavigate={handleNavigate}
           />
         )}
         
@@ -125,6 +155,14 @@ function App() {
             onPicklistUpdate={handlePicklistUpdate}
             onExport={handleExportPicklist}
             onBack={handleReset}
+            onNavigate={handleNavigate}
+          />
+        )}
+
+        {currentView === 'shopping' && (
+          <ShoppingList
+            picklist={editedPicklist || (results && results.picklist) || []}
+            onBack={() => handleNavigate('upload')}
           />
         )}
 

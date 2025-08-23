@@ -12,6 +12,7 @@ const itemsRoutes = require('./src/routes/items');
 const suppliersRoutes = require('./src/routes/suppliers');
 const preferencesRoutes = require('./src/routes/preferences');
 const picklistRoutes = require('./src/routes/picklist');
+const shoppingListRoutes = require('./src/routes/shoppingList');
 
 const app = express();
 const port = config.server.port;
@@ -111,6 +112,7 @@ app.use('/api/items', itemsRoutes);
 app.use('/api/suppliers', suppliersRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/picklist', picklistRoutes);
+app.use('/api/shopping-list', shoppingListRoutes);
 
 // Legacy API endpoints for backward compatibility
 app.get('/api/get-preference/:originalItem', (req, res, next) => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@mui/material'
 import Fuse from 'fuse.js'
 
-function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack }) {
+function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack, onNavigate }) {
   const [picklist, setPicklist] = useState([])
   const [editingCell, setEditingCell] = useState(null)
   const [availableSuppliers, setAvailableSuppliers] = useState([])
@@ -13,6 +13,9 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const [isExporting, setIsExporting] = useState(false) // Track export status
   const [preferencesApplied, setPreferencesApplied] = useState(false) // Track if preferences have been applied
   const [fuseInstance, setFuseInstance] = useState(null) // Fuzzy search instance
+  const [selectedRows, setSelectedRows] = useState(new Set()) // Track selected rows for bulk edit
+  const [showBulkEdit, setShowBulkEdit] = useState(false) // Show bulk edit controls
+  const [bulkMatchItem, setBulkMatchItem] = useState(null) // Item to bulk match to
 
   useEffect(() => {
     // If we have edited picklist from parent, use that instead of results
@@ -86,7 +89,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
         
         try {
           // Check for user preference first
-          const prefResponse = await fetch(`/api/get-preference/${encodeURIComponent(item.originalItem)}`)
+          const prefResponse = await fetch(`/api/preferences/${encodeURIComponent(item.originalItem)}`)
           if (prefResponse.ok) {
             const prefResult = await prefResponse.json()
             if (prefResult.success && prefResult.preference) {
@@ -344,6 +347,75 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     }
   }
 
+  // Bulk edit functions
+  const handleRowSelection = (index, isSelected) => {
+    const newSelectedRows = new Set(selectedRows)
+    if (isSelected) {
+      newSelectedRows.add(index)
+    } else {
+      newSelectedRows.delete(index)
+    }
+    setSelectedRows(newSelectedRows)
+    setShowBulkEdit(newSelectedRows.size > 0)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedRows.size === picklist.length) {
+      // Deselect all
+      setSelectedRows(new Set())
+      setShowBulkEdit(false)
+    } else {
+      // Select all
+      const allRows = new Set(picklist.map((_, index) => index))
+      setSelectedRows(allRows)
+      setShowBulkEdit(true)
+    }
+  }
+
+  const handleClearSelection = () => {
+    setSelectedRows(new Set())
+    setShowBulkEdit(false)
+    setBulkMatchItem(null)
+  }
+
+  const handleBulkMatch = async (selectedOption) => {
+    if (!selectedOption || selectedRows.size === 0) return
+
+    const newPicklist = [...picklist]
+    const selectedItem = selectedOption.item
+
+    // Fetch suppliers for this product
+    const suppliers = await fetchProductSuppliers(selectedItem.id)
+
+    // Apply the bulk match to all selected rows
+    for (const index of selectedRows) {
+      newPicklist[index] = { ...newPicklist[index] }
+      newPicklist[index].matchedItemId = selectedItem.id
+      newPicklist[index].manualOverride = true
+
+      if (suppliers && suppliers.length > 0) {
+        // Default to lowest price supplier (suppliers are already sorted by price)
+        const defaultSupplier = suppliers[0]
+        newPicklist[index].selectedSupplier = defaultSupplier.supplier_name
+        newPicklist[index].unitPrice = defaultSupplier.price
+        newPicklist[index].totalPrice = (defaultSupplier.price * newPicklist[index].quantity).toFixed(2)
+      } else {
+        // Fallback to original data if no specific suppliers found
+        newPicklist[index].selectedSupplier = selectedItem.bestSupplier
+        newPicklist[index].unitPrice = selectedItem.bestPrice
+        newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+      }
+    }
+
+    setPicklist(newPicklist)
+    if (onPicklistUpdate) {
+      onPicklistUpdate(newPicklist)
+    }
+
+    // Clear selection after bulk operation
+    handleClearSelection()
+  }
+
   const handleExport = async () => {
     setIsExporting(true)
     setExportResult(null)
@@ -362,7 +434,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       // Store preferences if any manual overrides were made
       if (preferences.length > 0) {
         try {
-          const response = await fetch('/api/store-preferences', {
+          const response = await fetch('/api/preferences', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -652,6 +724,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
                 <ul className="text-blue-600 text-sm mt-1 space-y-1">
                   <li>• Select matched items from the database to get automatic supplier and pricing</li>
                   <li>• Type in the matched item field to instantly search and filter 500+ items</li>
+                  <li>• Use checkboxes to select multiple rows and bulk match them to the same item</li>
+                  <li>• Click the header checkbox to select/deselect all rows at once</li>
                   <li>• Use arrow keys, Enter, and Escape for keyboard navigation</li>
                   <li>• Items with blue borders show learned preferences from your past selections</li>
                   <li>• Supplier dropdown shows all available suppliers with their prices</li>
@@ -663,11 +737,87 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
             </div>
           </div>
 
+          {/* Bulk Edit Controls */}
+          {showBulkEdit && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <span className="text-blue-800 font-semibold">
+                    {selectedRows.size} row{selectedRows.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <button
+                    onClick={handleClearSelection}
+                    className="text-blue-600 hover:text-blue-800 text-sm underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <span className="text-blue-700 font-medium">Bulk match selected rows to:</span>
+                <div className="flex-1 max-w-md">
+                  <Autocomplete
+                    value={bulkMatchItem}
+                    onChange={(_, newValue) => {
+                      setBulkMatchItem(newValue)
+                      if (newValue) {
+                        handleBulkMatch(newValue)
+                      }
+                    }}
+                    options={selectOptions}
+                    getOptionLabel={(option) => option ? option.item.description : ''}
+                    filterOptions={(options, { inputValue }) => {
+                      if (!inputValue || !fuseInstance) {
+                        return options
+                      }
+                      const results = fuseInstance.search(inputValue)
+                      return results.map(result => result.item)
+                    }}
+                    renderOption={(props, option) => (
+                      <li {...props} key={option.value}>
+                        <div className="font-medium text-gray-900">{option.item.description}</div>
+                      </li>
+                    )}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder="Search and select an item to match all selected rows..."
+                        size="small"
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            minHeight: '40px',
+                            fontSize: '14px',
+                          },
+                        }}
+                      />
+                    )}
+                    sx={{
+                      width: '100%',
+                      '& .MuiAutocomplete-listbox': {
+                        maxHeight: '240px',
+                        fontSize: '14px',
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Picklist Table */}
           <div className="overflow-x-auto overflow-y-visible mb-8">
             <table className="w-full border-collapse bg-white">
               <thead>
                 <tr className="bg-gray-50">
+                  <th className="border border-gray-200 p-3 text-center font-semibold text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.size === picklist.length && picklist.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                  </th>
                   <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">#</th>
                   <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Qty</th>
                   <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Original Item</th>
@@ -679,7 +829,17 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
               </thead>
               <tbody>
                 {picklist.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                  <tr key={index} className={`hover:bg-gray-50 transition-colors ${
+                    selectedRows.has(index) ? 'bg-blue-50 border-blue-200' : ''
+                  }`}>
+                    <td className="border border-gray-200 p-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(index)}
+                        onChange={(e) => handleRowSelection(index, e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                    </td>
                     <td className="border border-gray-200 p-2 text-center text-gray-600">
                       {index + 1}
                     </td>
@@ -746,6 +906,12 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
               className="w-full sm:w-auto px-8 py-3 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors"
             >
               Back to Upload
+            </button>
+            <button
+              onClick={() => onNavigate && onNavigate('shopping')}
+              className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+              🛒 Shopping List
             </button>
             <button
               onClick={handleExport}
