@@ -3,7 +3,6 @@ import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@m
 import Fuse from 'fuse.js'
 
 function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack, onNavigate }) {
-  const [picklist, setPicklist] = useState([])
   const [editingCell, setEditingCell] = useState(null)
   const [availableSuppliers, setAvailableSuppliers] = useState([])
   const [availableItems, setAvailableItems] = useState([])
@@ -11,157 +10,74 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const [productSuppliers, setProductSuppliers] = useState({}) // Cache of supplier options per product
   const [exportResult, setExportResult] = useState(null) // Store export results
   const [isExporting, setIsExporting] = useState(false) // Track export status
-  const [preferencesApplied, setPreferencesApplied] = useState(false) // Track if preferences have been applied
+  const [initialDataFetched, setInitialDataFetched] = useState(false) // Track if initial data fetch is done
+  const [lastProcessedPicklistHash, setLastProcessedPicklistHash] = useState('') // Track the last processed picklist
   const [fuseInstance, setFuseInstance] = useState(null) // Fuzzy search instance
   const [selectedRows, setSelectedRows] = useState(new Set()) // Track selected rows for bulk edit
   const [showBulkEdit, setShowBulkEdit] = useState(false) // Show bulk edit controls
   const [bulkMatchItem, setBulkMatchItem] = useState(null) // Item to bulk match to
 
-  useEffect(() => {
-    // If we have edited picklist from parent, use that instead of results
+  // Calculate picklist directly from props
+  const currentPicklist = React.useMemo(() => {
     if (editedPicklist) {
-      setPicklist(editedPicklist)
-      setPreferencesApplied(true) // Already processed
-      
-      // Extract unique suppliers from edited picklist for dropdown
-      const suppliers = [...new Set(editedPicklist
-        .filter(item => item.selectedSupplier !== 'No supplier found')
-        .map(item => item.selectedSupplier)
-      )].sort()
-      setAvailableSuppliers(['No supplier found', ...suppliers])
-      
-      // Still need to fetch database data for dropdown options
-      fetchDatabaseData()
-      
-      // Also fetch supplier data for already matched items
-      editedPicklist.forEach(item => {
-        if (item.matchedItemId) {
-          fetchProductSuppliers(item.matchedItemId)
-        }
-      })
-      return
+      return editedPicklist
     }
 
-    // Reset preferences applied flag for new results
-    setPreferencesApplied(false)
-    
-    // Convert results to editable picklist format
     if (results && results.picklist) {
-      // Backend already provides matchedItemId, no need to search for it
-      const enrichedPicklist = results.picklist.map(item => ({
+      return results.picklist.map(item => ({
         ...item,
-        // Backend already provides originalItem, matchedItemId, and manualOverride
-        // Just ensure we have them for consistency
         originalItem: item.originalItem || item.item,
-        matchedItemId: item.matchedItemId, // Already provided by backend
+        matchedItemId: item.matchedItemId,
         manualOverride: item.manualOverride || false
       }))
-      setPicklist(enrichedPicklist)
-      
+    }
+
+    return []
+  }, [results, editedPicklist])
+  
+  // Reset state when props change to a truly different picklist
+  React.useEffect(() => {
+    const currentHash = JSON.stringify({
+      hasResults: !!results,
+      picklistLength: currentPicklist.length,
+      firstItemOriginal: currentPicklist[0]?.originalItem || '',
+      firstItemId: currentPicklist[0]?.matchedItemId || null
+    })
+    
+    if (currentHash !== lastProcessedPicklistHash) {
+      setInitialDataFetched(false)
+      setLastProcessedPicklistHash(currentHash)
+    }
+  }, [results, editedPicklist, currentPicklist, lastProcessedPicklistHash])
+
+  // Handle side effects separately - only run once when picklist is first available
+  React.useEffect(() => {
+    if (currentPicklist.length > 0 && !initialDataFetched) {
       // Extract unique suppliers for dropdown
-      const suppliers = [...new Set(results.picklist
+      const suppliers = [...new Set(currentPicklist
         .filter(item => item.selectedSupplier !== 'No supplier found')
         .map(item => item.selectedSupplier)
       )].sort()
       setAvailableSuppliers(['No supplier found', ...suppliers])
-    }
-    
-    // Fetch available suppliers and items from database
-    fetchDatabaseData()
-  }, [results, editedPicklist])
-
-  // Apply preferences when both picklist and available items are ready
-  useEffect(() => {
-    if (picklist.length > 0 && availableItems.length > 0 && !preferencesApplied) {
-      // Apply preferences to picklist
-      applyPreferencesToPicklist(availableItems)
-      setPreferencesApplied(true)
-    }
-  }, [picklist.length, availableItems.length, preferencesApplied]) // Only run when both are populated and not yet applied
-
-  const applyPreferencesToPicklist = async (availableItemsData) => {
-    try {
-      const picklistWithMatches = await Promise.all(picklist.map(async item => {
-        // Skip items that have already been manually overridden
-        if (item.manualOverride) {
-          return item
-        }
-        
-        try {
-          // Check for user preference first
-          const prefResponse = await fetch(`/api/preferences/${encodeURIComponent(item.originalItem)}`)
-          if (prefResponse.ok) {
-            const prefResult = await prefResponse.json()
-            if (prefResult.success && prefResult.preference) {
-              console.log(`Applied learned preference for "${item.originalItem}" -> "${prefResult.preference.description}"`)
-              
-              // Find the product in available items to get all supplier options
-              const matchedProduct = availableItemsData.find(dbItem => dbItem.id === prefResult.preference.productId)
-              
-              if (matchedProduct) {
-                // Fetch suppliers for this product and default to lowest price
-                const suppliers = await fetchProductSuppliers(prefResult.preference.productId)
-                
-                if (suppliers && suppliers.length > 0) {
-                  // Default to lowest price supplier (suppliers are sorted by price)
-                  const defaultSupplier = suppliers[0]
-                  return {
-                    ...item,
-                    matchedItemId: prefResult.preference.productId,
-                    selectedSupplier: defaultSupplier.supplier_name,
-                    unitPrice: defaultSupplier.price,
-                    totalPrice: (defaultSupplier.price * item.quantity).toFixed(2),
-                    manualOverride: false, // This is from learned preference, not manual
-                    learnedMatch: true // Flag to indicate this came from learning
-                  }
-                } else {
-                  // Fallback to original best supplier data
-                  return {
-                    ...item,
-                    matchedItemId: prefResult.preference.productId,
-                    selectedSupplier: matchedProduct.bestSupplier,
-                    unitPrice: matchedProduct.bestPrice,
-                    totalPrice: (matchedProduct.bestPrice * item.quantity).toFixed(2),
-                    manualOverride: false,
-                    learnedMatch: true
-                  }
-                }
-              } else {
-                // Product not found in current available items, just set the match
-                fetchProductSuppliers(prefResult.preference.productId)
-                
-                return {
-                  ...item,
-                  matchedItemId: prefResult.preference.productId,
-                  learnedMatch: true
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to get preference for', item.originalItem, error)
-        }
-        
-        // Backend already provided the correct matchedItemId, just use it
-        if (item.matchedItemId) {
-          // Fetch suppliers for the backend-matched product
-          fetchProductSuppliers(item.matchedItemId)
-        }
-        
-        return {
-          ...item,
-          learnedMatch: false
-        }
-      }))
       
-      setPicklist(picklistWithMatches)
-      if (onPicklistUpdate) {
-        onPicklistUpdate(picklistWithMatches)
-      }
-    } catch (error) {
-      console.error('Error applying preferences:', error)
+      // Fetch database data
+      fetchDatabaseData()
+      
+      // Fetch supplier data for matched items (only unique IDs)
+      const uniqueMatchedIds = [...new Set(currentPicklist
+        .filter(item => item.matchedItemId)
+        .map(item => item.matchedItemId)
+      )]
+      
+      uniqueMatchedIds.forEach(matchedItemId => {
+        fetchProductSuppliers(matchedItemId)
+      })
+      
+      setInitialDataFetched(true)
     }
-  }
+  }, [currentPicklist.length, initialDataFetched])
+
+  // Preferences are now applied in the backend during initial picklist creation
 
   const fetchDatabaseData = async () => {
     try {
@@ -199,9 +115,6 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
         }
         const fuse = new Fuse(options, fuseOptions)
         setFuseInstance(fuse)
-        
-        // Store items for later preference application
-        // Preferences will be applied in a separate useEffect when picklist is ready
       }
     } catch (error) {
       console.error('Error fetching database data:', error)
@@ -214,7 +127,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     }
     
     try {
-      const response = await fetch(`/api/products/${productId}/suppliers`)
+      const response = await fetch(`/api/items/${productId}/suppliers`)
       if (response.ok) {
         const data = await response.json()
         const suppliers = data.suppliers || []
@@ -228,7 +141,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   }
 
   const handleSelectChange = async (selectedOption, index) => {
-    const newPicklist = [...picklist]
+    const newPicklist = [...currentPicklist]
     newPicklist[index] = { ...newPicklist[index] }
     
     if (!selectedOption) {
@@ -261,14 +174,13 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       }
     }
     
-    setPicklist(newPicklist)
     if (onPicklistUpdate) {
       onPicklistUpdate(newPicklist)
     }
   }
 
   const handleCellEdit = (index, field, value) => {
-    const newPicklist = [...picklist]
+    const newPicklist = [...currentPicklist]
     newPicklist[index] = { ...newPicklist[index] }
     
     if (field === 'matchedItem') {
@@ -324,24 +236,23 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       }
     }
     
-    setPicklist(newPicklist)
     if (onPicklistUpdate) {
       onPicklistUpdate(newPicklist)
     }
   }
 
   const calculateSummary = () => {
-    const itemsWithSuppliers = picklist.filter(item => 
+    const itemsWithSuppliers = currentPicklist.filter(item => 
       item.selectedSupplier !== 'No supplier found'
     ).length
     
-    const totalCost = picklist.reduce((sum, item) => {
+    const totalCost = currentPicklist.reduce((sum, item) => {
       const price = parseFloat(item.totalPrice)
       return isNaN(price) ? sum : sum + price
     }, 0)
     
     return {
-      totalItems: picklist.length,
+      totalItems: currentPicklist.length,
       itemsWithSuppliers,
       totalCost
     }
@@ -360,13 +271,13 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   }
 
   const handleSelectAll = () => {
-    if (selectedRows.size === picklist.length) {
+    if (selectedRows.size === currentPicklist.length) {
       // Deselect all
       setSelectedRows(new Set())
       setShowBulkEdit(false)
     } else {
       // Select all
-      const allRows = new Set(picklist.map((_, index) => index))
+      const allRows = new Set(currentPicklist.map((_, index) => index))
       setSelectedRows(allRows)
       setShowBulkEdit(true)
     }
@@ -381,7 +292,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const handleBulkMatch = async (selectedOption) => {
     if (!selectedOption || selectedRows.size === 0) return
 
-    const newPicklist = [...picklist]
+    const newPicklist = [...currentPicklist]
     const selectedItem = selectedOption.item
 
     // Fetch suppliers for this product
@@ -407,7 +318,6 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       }
     }
 
-    setPicklist(newPicklist)
     if (onPicklistUpdate) {
       onPicklistUpdate(newPicklist)
     }
@@ -424,7 +334,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       const summary = calculateSummary()
       
       // Capture manual overrides for machine learning (product matching only)
-      const preferences = picklist
+      const preferences = currentPicklist
         .filter(item => item.manualOverride && item.matchedItemId)
         .map(item => ({
           originalItem: item.originalItem,
@@ -454,7 +364,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       }
       
       // Prepare export data with final item name (use matched item description if available, otherwise original)
-      const exportPicklist = picklist.map(item => {
+      const exportPicklist = currentPicklist.map(item => {
         const matchedItem = availableItems.find(dbItem => dbItem.id === item.matchedItemId)
         return {
           ...item,
@@ -549,7 +459,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     if (field === 'matchedItem') {
       const selectedOption = selectOptions.find(option => option.value === item.matchedItemId)
       // Determine if this row is in the bottom 3 rows
-      const isBottomRows = index >= (picklist.length - 3)
+      const isBottomRows = index >= (currentPicklist.length - 3)
       
       return (
         <div className="space-y-1">
@@ -563,7 +473,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
           
           <Autocomplete
             value={selectedOption || null}
-            onChange={(event, newValue) => handleSelectChange(newValue, index)}
+            onChange={(_, newValue) => handleSelectChange(newValue, index)}
             options={selectOptions}
             getOptionLabel={(option) => option ? option.item.description : ''}
             filterOptions={(options, { inputValue }) => {
@@ -606,7 +516,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
             )}
             clearOnEscape
             disablePortal={!isBottomRows}
-            componentsProps={{
+            slotProps={{
               popper: {
                 placement: isBottomRows ? 'top' : 'bottom-start',
                 modifiers: [
@@ -669,7 +579,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     )
   }
 
-  if (!picklist.length) {
+  // Only show "no data" if we have no source data at all
+  if (!currentPicklist.length && !results?.picklist && !editedPicklist) {
     return (
       <div className="min-h-screen gradient-bg flex items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center">
@@ -813,7 +724,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
                   <th className="border border-gray-200 p-3 text-center font-semibold text-gray-700">
                     <input
                       type="checkbox"
-                      checked={selectedRows.size === picklist.length && picklist.length > 0}
+                      checked={selectedRows.size === currentPicklist.length && currentPicklist.length > 0}
                       onChange={handleSelectAll}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
@@ -828,7 +739,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
                 </tr>
               </thead>
               <tbody>
-                {picklist.map((item, index) => (
+                {currentPicklist.map((item, index) => (
                   <tr key={index} className={`hover:bg-gray-50 transition-colors ${
                     selectedRows.has(index) ? 'bg-blue-50 border-blue-200' : ''
                   }`}>

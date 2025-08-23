@@ -15,6 +15,7 @@ function SharedShoppingList({ shareId, onError }) {
         const result = await response.json();
         
         if (result.success) {
+          console.log('Shared shopping list data:', result.data);
           setSharedData(result.data);
         } else {
           setError(result.error || 'Failed to load shopping list');
@@ -72,7 +73,7 @@ function SharedShoppingList({ shareId, onError }) {
     );
   }
 
-  if (!sharedData) {
+  if (!loading && !sharedData) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
@@ -90,23 +91,38 @@ function SharedShoppingList({ shareId, onError }) {
     );
   }
 
-  return (
-    <div className="min-h-screen">
-      {/* Shared List Header */}
-      <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
-        <div className="text-center">
-          <div className="text-sm text-blue-600">📤 Shared Shopping List</div>
-          <div className="text-xs text-blue-500">
-            Created {new Date(sharedData.createdAt).toLocaleDateString()}
+  // Only render ShoppingList when we have data
+  if (!loading && sharedData && sharedData.picklist) {
+    return (
+      <div className="min-h-screen">
+        {/* Shared List Header */}
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+          <div className="text-center">
+            <div className="text-sm text-blue-600">📤 Shared Shopping List</div>
+            <div className="text-xs text-blue-500">
+              Created {new Date(sharedData.createdAt).toLocaleDateString()}
+            </div>
           </div>
         </div>
-      </div>
 
-      <ShoppingList
-        picklist={sharedData.picklist}
-        shareId={shareId}
-        onBack={handleBack}
-      />
+        <ShoppingList
+          picklist={sharedData.picklist}
+          shareId={shareId}
+          onBack={handleBack}
+          loading={false}
+        />
+      </div>
+    );
+  }
+
+  // If we get here, we're still loading or don't have complete data
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
+        <div className="text-6xl mb-4 animate-spin">⏳</div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Loading Shopping List</h2>
+        <p className="text-gray-600">Please wait while we load your shared shopping list...</p>
+      </div>
     </div>
   );
 }

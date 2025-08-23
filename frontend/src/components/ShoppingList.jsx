@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import useWebSocket from '../hooks/useWebSocket';
 
-function ShoppingList({ picklist, onBack, shareId = null }) {
+function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [groupedItems, setGroupedItems] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
@@ -267,6 +267,19 @@ function ShoppingList({ picklist, onBack, shareId = null }) {
       handleCopyLink();
     }
   };
+
+  // Show loading state while data is being fetched
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
+          <div className="text-6xl mb-4 animate-spin">⏳</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Loading Shopping List</h2>
+          <p className="text-gray-600">Please wait while we load your shopping list...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!picklist || picklist.length === 0) {
     return (
