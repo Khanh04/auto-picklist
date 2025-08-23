@@ -99,6 +99,13 @@ const useWebSocket = (shareId) => {
     })
   }, [sendMessage])
 
+  const switchSupplier = useCallback((itemData) => {
+    sendMessage({
+      type: 'switch_supplier',
+      data: itemData
+    })
+  }, [sendMessage])
+
   useEffect(() => {
     if (shareId) {
       connect()
@@ -115,6 +122,7 @@ const useWebSocket = (shareId) => {
     subscribe,
     updateItem,
     toggleCompleted,
+    switchSupplier,
     disconnect
   }
 }

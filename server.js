@@ -384,6 +384,32 @@ wss.on('connection', (ws, req) => {
                         }
                     }
                     break;
+                    
+                case 'switch_supplier':
+                    if (ws.shareId) {
+                        const { index, supplier, unitPrice, totalPrice } = message.data;
+                        
+                        // Broadcast supplier switch to all clients in this shopping list
+                        const connections = shoppingListConnections.get(ws.shareId);
+                        if (connections) {
+                            connections.forEach((client) => {
+                                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                                    client.send(JSON.stringify({
+                                        type: 'supplier_switched',
+                                        data: {
+                                            index: index,
+                                            supplier: supplier,
+                                            unitPrice: unitPrice,
+                                            totalPrice: totalPrice
+                                        }
+                                    }));
+                                }
+                            });
+                        }
+                        
+                        console.log(`Supplier switched for item ${index} in shopping list ${ws.shareId}`);
+                    }
+                    break;
             }
         } catch (error) {
             console.error('WebSocket message error:', error);

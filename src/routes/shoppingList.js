@@ -50,6 +50,7 @@ router.post('/share',
         const cleanPicklist = picklist.map(item => ({
             originalItem: item.originalItem || item.item,
             matchedDescription: item.matchedDescription,
+            matchedItemId: item.matchedItemId,
             quantity: item.quantity,
             selectedSupplier: item.selectedSupplier,
             unitPrice: item.unitPrice,

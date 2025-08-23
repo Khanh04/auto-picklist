@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import useWebSocket from '../hooks/useWebSocket';
 
-function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
+function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading = false, onPicklistUpdate = null }) {
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [groupedItems, setGroupedItems] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
@@ -12,9 +12,46 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [listTitle, setListTitle] = useState('Shopping List');
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [currentPicklist, setCurrentPicklist] = useState(propPicklist || []);
+  const [switchingSupplier, setSwitchingSupplier] = useState(new Set());
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [supplierModalData, setSupplierModalData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Initialize WebSocket connection for shared lists
-  const { isConnected, connectionError, subscribe, toggleCompleted } = useWebSocket(shareId);
+  const { isConnected, connectionError, subscribe, toggleCompleted, switchSupplier } = useWebSocket(shareId);
+
+  // Initialize picklist data - for shared lists, fetch from API; for main lists, use props
+  useEffect(() => {
+    const loadPicklistData = async () => {
+      if (shareId) {
+        // For shared lists, fetch data from API
+        setIsLoading(true);
+        setError(null);
+        try {
+          const response = await fetch(`/api/shopping-list/share/${shareId}`);
+          const result = await response.json();
+          
+          if (result.success && result.data && result.data.picklist) {
+            setCurrentPicklist(result.data.picklist);
+          } else {
+            setError(result.error || 'Failed to load shopping list');
+          }
+        } catch (error) {
+          console.error('Error fetching shared list:', error);
+          setError('Network error while loading shopping list');
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // For main lists, use the provided picklist prop
+        setCurrentPicklist(propPicklist || []);
+      }
+    };
+
+    loadPicklistData();
+  }, [shareId, propPicklist]);
 
   // Set up WebSocket event handlers for shared lists
   useEffect(() => {
@@ -35,6 +72,24 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
       });
     });
 
+    // Handle real-time supplier switch updates from other users
+    const unsubscribeSupplier = subscribe('supplier_switched', (data) => {
+      const { index, supplier, unitPrice, totalPrice } = data;
+      console.log('Received supplier switch update:', data);
+      setCurrentPicklist(prevPicklist => {
+        const newPicklist = [...prevPicklist];
+        if (newPicklist[index]) {
+          newPicklist[index] = {
+            ...newPicklist[index],
+            selectedSupplier: supplier,
+            unitPrice: unitPrice,
+            totalPrice: totalPrice
+          };
+        }
+        return newPicklist;
+      });
+    });
+
     // Handle errors from WebSocket
     const unsubscribeError = subscribe('error', (data) => {
       console.error('WebSocket error:', data.message);
@@ -43,6 +98,7 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
 
     return () => {
       unsubscribeToggle();
+      unsubscribeSupplier();
       unsubscribeError();
     };
   }, [shareId, subscribe]);
@@ -69,8 +125,8 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
       // For shared lists, the state is loaded from the database via the picklist prop
       // which already includes isChecked state from the API
       const checkedIndices = new Set();
-      if (picklist) {
-        picklist.forEach((item, index) => {
+      if (currentPicklist) {
+        currentPicklist.forEach((item, index) => {
           if (item.isChecked) {
             checkedIndices.add(index);
           }
@@ -90,17 +146,17 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
         }
       }
     }
-  }, [shareId, picklist]);
+  }, [shareId, currentPicklist]);
 
   // Group items by supplier and calculate costs
   useEffect(() => {
-    if (!picklist || picklist.length === 0) return;
+    if (!currentPicklist || currentPicklist.length === 0) return;
 
     const grouped = {};
     let total = 0;
     let checked = 0;
 
-    picklist.forEach((item, index) => {
+    currentPicklist.forEach((item, index) => {
       const supplier = item.selectedSupplier || 'No supplier found';
       if (!grouped[supplier]) {
         grouped[supplier] = [];
@@ -120,7 +176,7 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
     setGroupedItems(grouped);
     setTotalCost(total);
     setCheckedCost(checked);
-  }, [picklist, checkedItems]);
+  }, [currentPicklist, checkedItems]);
 
   // Save checked items to localStorage (only for local lists)
   useEffect(() => {
@@ -196,21 +252,213 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
   };
 
   const getItemsCount = () => {
-    const total = picklist.length;
+    const total = currentPicklist.length;
     const checked = checkedItems.size;
     return { total, checked, remaining: total - checked };
+  };
+
+  const handleSupplierNotAvailable = async (item, index) => {
+    if (!item.matchedItemId || switchingSupplier.has(index)) return;
+
+    setSwitchingSupplier(prev => new Set(prev).add(index));
+
+    try {
+      const response = await fetch(`/api/items/${item.matchedItemId}/switch-supplier`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentSupplier: item.selectedSupplier,
+          currentPrice: parseFloat(item.unitPrice)
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const newTotalPrice = (result.supplier.price * item.quantity).toFixed(2);
+        
+        // Update local state
+        setCurrentPicklist(prevPicklist => {
+          const newPicklist = [...prevPicklist];
+          newPicklist[index] = {
+            ...newPicklist[index],
+            selectedSupplier: result.supplier.name,
+            unitPrice: result.supplier.price,
+            totalPrice: newTotalPrice
+          };
+          
+          // Update parent component state if callback provided (main shopping list)
+          if (onPicklistUpdate && !shareId) {
+            onPicklistUpdate(newPicklist);
+          }
+          
+          return newPicklist;
+        });
+
+        // Send real-time update for shared lists
+        if (shareId && switchSupplier) {
+          switchSupplier({
+            index: index,
+            supplier: result.supplier.name,
+            unitPrice: result.supplier.price,
+            totalPrice: newTotalPrice,
+            timestamp: Date.now()
+          });
+        }
+
+        console.log(`Switched supplier for "${item.originalItem}" from ${result.previousSupplier.name} ($${result.previousSupplier.price}) to ${result.supplier.name} ($${result.supplier.price})`);
+      } else if (result.requiresManualSelection) {
+        // Show manual supplier selection modal
+        setSupplierModalData({
+          item,
+          index,
+          availableSuppliers: result.availableSuppliers,
+          currentSupplier: result.currentSupplier
+        });
+        setShowSupplierModal(true);
+      } else {
+        alert(result.error || 'Unable to switch supplier');
+      }
+    } catch (error) {
+      console.error('Error switching supplier:', error);
+      alert('Network error while switching supplier');
+    } finally {
+      setSwitchingSupplier(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
+
+  const handleManualSupplierSelection = async (selectedSupplier, selectedPrice) => {
+    if (!supplierModalData) return;
+
+    const { item, index } = supplierModalData;
+    setSwitchingSupplier(prev => new Set(prev).add(index));
+
+    try {
+      const response = await fetch(`/api/items/${item.matchedItemId}/select-supplier`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          selectedSupplier: selectedSupplier,
+          selectedPrice: selectedPrice
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const newTotalPrice = (result.supplier.price * item.quantity).toFixed(2);
+        
+        // Update local state
+        setCurrentPicklist(prevPicklist => {
+          const newPicklist = [...prevPicklist];
+          newPicklist[index] = {
+            ...newPicklist[index],
+            selectedSupplier: result.supplier.name,
+            unitPrice: result.supplier.price,
+            totalPrice: newTotalPrice
+          };
+          
+          // Update parent component state if callback provided (main shopping list)
+          if (onPicklistUpdate && !shareId) {
+            onPicklistUpdate(newPicklist);
+          }
+          
+          return newPicklist;
+        });
+
+        // Send real-time update for shared lists
+        if (shareId && switchSupplier) {
+          switchSupplier({
+            index: index,
+            supplier: result.supplier.name,
+            unitPrice: result.supplier.price,
+            totalPrice: newTotalPrice,
+            timestamp: Date.now()
+          });
+        }
+
+        console.log(`Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
+        
+        // Close modal
+        setShowSupplierModal(false);
+        setSupplierModalData(null);
+      } else {
+        alert(result.error || 'Unable to select supplier');
+      }
+    } catch (error) {
+      console.error('Error selecting supplier:', error);
+      alert('Network error while selecting supplier');
+    } finally {
+      setSwitchingSupplier(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
+
+  const handleNoSupplier = () => {
+    if (!supplierModalData) return;
+
+    const { index } = supplierModalData;
+    
+    // Update to "No supplier found"
+    setCurrentPicklist(prevPicklist => {
+      const newPicklist = [...prevPicklist];
+      newPicklist[index] = {
+        ...newPicklist[index],
+        selectedSupplier: 'No supplier found',
+        unitPrice: 'No price found',
+        totalPrice: 'N/A'
+      };
+      
+      // Update parent component state if callback provided (main shopping list)
+      if (onPicklistUpdate) {
+        onPicklistUpdate(newPicklist);
+      }
+      
+      return newPicklist;
+    });
+
+    // Send real-time update for shared lists
+    if (shareId && switchSupplier) {
+      switchSupplier({
+        index: index,
+        supplier: 'No supplier found',
+        unitPrice: 'No price found',
+        totalPrice: 'N/A',
+        timestamp: Date.now()
+      });
+    }
+
+    // Close modal
+    setShowSupplierModal(false);
+    setSupplierModalData(null);
   };
 
   const handleShare = async () => {
     setIsSharing(true);
     try {
+      // First, ensure the parent component has the latest state (for main shopping list)
+      if (onPicklistUpdate && !shareId) {
+        onPicklistUpdate(currentPicklist);
+      }
+
       const response = await fetch('/api/shopping-list/share', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          picklist,
+          picklist: currentPicklist,
           title: listTitle
         })
       });
@@ -220,6 +468,7 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
       if (result.success) {
         setShareUrl(result.shareUrl);
         setShowShareOptions(true);
+        console.log('Created shared list with current state including all supplier changes');
       } else {
         alert('Failed to create shareable link: ' + (result.error || 'Unknown error'));
       }
@@ -269,7 +518,7 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
   };
 
   // Show loading state while data is being fetched
-  if (loading) {
+  if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
@@ -281,7 +530,34 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
     );
   }
 
-  if (!picklist || picklist.length === 0) {
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Shopping List Not Found</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">This could happen if:</p>
+            <ul className="text-sm text-gray-500 text-left space-y-1">
+              <li>• The link has expired (24 hour limit)</li>
+              <li>• The link was mistyped</li>
+              <li>• The list was deleted</li>
+            </ul>
+          </div>
+          <button
+            onClick={onBack}
+            className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors w-full"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentPicklist || currentPicklist.length === 0) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
@@ -304,6 +580,18 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Shared List Header Banner */}
+      {shareId && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+          <div className="text-center">
+            <div className="text-sm text-blue-600">📤 Shared Shopping List</div>
+            <div className="text-xs text-blue-500">
+              Real-time collaboration active
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header - Fixed */}
       <div className="bg-white shadow-sm sticky top-0 z-10 border-b">
         <div className="px-4 py-3">
@@ -312,17 +600,19 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
               onClick={onBack}
               className="text-blue-600 hover:text-blue-800 font-medium"
             >
-              ← Back to Picklist
+              ← Back {shareId ? 'to Main App' : 'to Picklist'}
             </button>
             <h1 className="text-lg font-bold text-gray-900">Shopping List</h1>
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleShare}
-                disabled={isSharing}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium disabled:opacity-50"
-              >
-                {isSharing ? '⏳' : '📤'} Share
-              </button>
+              {!shareId && (
+                <button
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium disabled:opacity-50"
+                >
+                  {isSharing ? '⏳' : '📤'} Share
+                </button>
+              )}
               <button
                 onClick={handleClearAll}
                 className="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -501,11 +791,31 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
                               }`}>
                                 Total: {item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : 'N/A'}
                               </div>
-                              {isChecked && (
-                                <div className="text-xs text-green-600 font-medium">
-                                  ✓ Purchased
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {/* Not Available Button */}
+                                {!isChecked && item.matchedItemId && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSupplierNotAvailable(item, item.index);
+                                    }}
+                                    disabled={switchingSupplier.has(item.index)}
+                                    className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${
+                                      switchingSupplier.has(item.index)
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300'
+                                    }`}
+                                    title="Switch to next lowest price supplier if this item is not available"
+                                  >
+                                    {switchingSupplier.has(item.index) ? '⏳ Switching...' : '❌ Not Available'}
+                                  </button>
+                                )}
+                                {isChecked && (
+                                  <div className="text-xs text-green-600 font-medium">
+                                    ✓ Purchased
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -576,6 +886,88 @@ function ShoppingList({ picklist, onBack, shareId = null, loading = false }) {
             <div className="font-semibold">Shopping Complete!</div>
             <div className="text-sm opacity-90">
               All {stats.total} items have been purchased
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Selection Modal */}
+      {showSupplierModal && supplierModalData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Select Alternative Supplier</h3>
+                <button
+                  onClick={() => {
+                    setShowSupplierModal(false);
+                    setSupplierModalData(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Item:</strong> {supplierModalData.item.originalItem}
+                </p>
+                <p className="text-sm text-orange-600 mb-4">
+                  No higher-priced suppliers available. Please select an alternative or mark as "No supplier found".
+                </p>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                <h4 className="text-sm font-medium text-gray-900">Available Suppliers:</h4>
+                {supplierModalData.availableSuppliers.map((supplier, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleManualSupplierSelection(supplier.name, supplier.price)}
+                    disabled={supplier.isCurrent}
+                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                      supplier.isCurrent
+                        ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {supplier.name}
+                          {supplier.isCurrent && ' (Current)'}
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        ${supplier.price.toFixed(2)}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={handleNoSupplier}
+                  className="w-full bg-gray-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-600 transition-colors"
+                >
+                  Mark as "No Supplier Found"
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowSupplierModal(false);
+                    setSupplierModalData(null);
+                  }}
+                  className="w-full bg-gray-200 text-gray-800 py-3 px-4 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                Changes will be synced to all users in shared lists
+              </div>
             </div>
           </div>
         </div>

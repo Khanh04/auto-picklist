@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
@@ -6,7 +6,6 @@ import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
 import ShoppingList from './components/ShoppingList'
-import SharedShoppingList from './components/SharedShoppingList'
 import DatabaseManager from './components/DatabaseManager'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
@@ -81,13 +80,12 @@ function AppContent() {
   const SharedShoppingListPage = () => {
     const { shareId } = useParams()
     return (
-      <SharedShoppingList 
-        shareId={shareId} 
-        onError={(error) => {
-          setError(error)
-          navigate('/error')
-        }}
-      />
+      <div className="min-h-screen">
+        <ShoppingList
+          shareId={shareId}
+          onBack={() => navigate('/')}
+        />
+      </div>
     )
   }
 
@@ -149,19 +147,70 @@ function AppContent() {
     </div>
   )
 
-  // Shopping List Page Component
-  const ShoppingListPage = () => (
-    <div className="min-h-screen gradient-bg">
-      <Header />
-      <main className="flex-1">
-        <ShoppingList
-          picklist={editedPicklist || (results && results.picklist) || []}
-          onBack={() => navigate('/')}
-        />
-      </main>
-      <Footer />
-    </div>
-  )
+  // Shopping List Page Component - automatically creates shared list
+  const ShoppingListPage = () => {
+    const [isCreatingShare, setIsCreatingShare] = useState(false)
+    
+    useEffect(() => {
+      // Auto-create shared list when accessing shopping list
+      const createSharedList = async () => {
+        const currentPicklist = editedPicklist || (results && results.picklist)
+        if (!currentPicklist || currentPicklist.length === 0) {
+          navigate('/')
+          return
+        }
+        
+        setIsCreatingShare(true)
+        try {
+          const response = await fetch('/api/shopping-list/share', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              picklist: currentPicklist,
+              title: 'Shopping List'
+            })
+          })
+          
+          const result = await response.json()
+          if (result.success) {
+            // Redirect to shared shopping list
+            navigate(`/shopping/${result.shareId}`, { replace: true })
+          } else {
+            console.error('Failed to create shared list:', result.error)
+            setIsCreatingShare(false)
+          }
+        } catch (error) {
+          console.error('Error creating shared list:', error)
+          setIsCreatingShare(false)
+        }
+      }
+      
+      createSharedList()
+    }, [editedPicklist, results, navigate])
+    
+    if (isCreatingShare) {
+      return (
+        <div className="min-h-screen gradient-bg">
+          <Header />
+          <main className="flex-1">
+            <div className="max-w-2xl mx-auto p-8">
+              <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+                <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
+                  <span className="spinner"></span>
+                  Creating shopping list...
+                </div>
+              </div>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      )
+    }
+    
+    return null
+  }
 
   // Database Manager Page Component
   const DatabasePage = () => (

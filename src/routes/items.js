@@ -140,4 +140,146 @@ router.get('/search',
     })
 );
 
+/**
+ * POST /api/items/:productId/switch-supplier
+ * Switch to next lowest price supplier for a product
+ */
+router.post('/:productId/switch-supplier',
+    validateParams({ productId: { type: 'id' } }),
+    validateBody({
+        currentSupplier: { required: true, type: 'string' },
+        currentPrice: { required: true, type: 'number', min: 0 }
+    }),
+    asyncHandler(async (req, res) => {
+        const { productId } = req.params;
+        const { currentSupplier, currentPrice } = req.body;
+        
+        // Get all suppliers for this product, sorted by price
+        const suppliers = await productRepository.getSuppliersByProductId(productId);
+        
+        if (!suppliers || suppliers.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'No suppliers available for this product'
+            });
+        }
+
+        // If there's only one supplier, offer manual selection with "No supplier found" option
+        if (suppliers.length === 1) {
+            return res.json({
+                success: false,
+                error: 'Only one supplier available for this product',
+                requiresManualSelection: true,
+                availableSuppliers: suppliers.map(s => ({
+                    name: s.supplier_name,
+                    price: parseFloat(s.price),
+                    isCurrent: s.supplier_name === currentSupplier && parseFloat(s.price) === parseFloat(currentPrice)
+                })),
+                currentSupplier: {
+                    name: currentSupplier,
+                    price: currentPrice
+                }
+            });
+        }
+        
+        // Find current supplier index
+        const currentIndex = suppliers.findIndex(s => 
+            s.supplier_name === currentSupplier && 
+            parseFloat(s.price) === parseFloat(currentPrice)
+        );
+        
+        if (currentIndex === -1) {
+            return res.status(404).json({
+                success: false,
+                error: 'Current supplier not found for this product'
+            });
+        }
+        
+        // Get next supplier (next higher price)
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= suppliers.length) {
+            // No automatic next supplier, return all suppliers for manual selection
+            return res.json({
+                success: false,
+                error: 'No suppliers with higher prices available',
+                requiresManualSelection: true,
+                availableSuppliers: suppliers.map(s => ({
+                    name: s.supplier_name,
+                    price: parseFloat(s.price),
+                    isCurrent: s.supplier_name === currentSupplier && parseFloat(s.price) === parseFloat(currentPrice)
+                })),
+                currentSupplier: {
+                    name: currentSupplier,
+                    price: currentPrice
+                }
+            });
+        }
+        
+        const nextSupplier = suppliers[nextIndex];
+        
+        res.json({
+            success: true,
+            message: 'Successfully switched to next lowest price supplier',
+            supplier: {
+                name: nextSupplier.supplier_name,
+                price: parseFloat(nextSupplier.price),
+                productId: productId
+            },
+            previousSupplier: {
+                name: currentSupplier,
+                price: currentPrice
+            }
+        });
+    })
+);
+
+/**
+ * POST /api/items/:productId/select-supplier
+ * Manually select a specific supplier for a product
+ */
+router.post('/:productId/select-supplier',
+    validateParams({ productId: { type: 'id' } }),
+    validateBody({
+        selectedSupplier: { required: true, type: 'string' },
+        selectedPrice: { required: true, type: 'number', min: 0 }
+    }),
+    asyncHandler(async (req, res) => {
+        const { productId } = req.params;
+        const { selectedSupplier, selectedPrice } = req.body;
+        
+        // Get all suppliers for this product to validate the selection
+        const suppliers = await productRepository.getSuppliersByProductId(productId);
+        
+        if (!suppliers || suppliers.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'No suppliers available for this product'
+            });
+        }
+        
+        // Validate that the selected supplier exists for this product
+        const validSupplier = suppliers.find(s => 
+            s.supplier_name === selectedSupplier && 
+            parseFloat(s.price) === parseFloat(selectedPrice)
+        );
+        
+        if (!validSupplier) {
+            return res.status(400).json({
+                success: false,
+                error: 'Selected supplier not found for this product'
+            });
+        }
+        
+        res.json({
+            success: true,
+            message: 'Successfully selected supplier',
+            supplier: {
+                name: validSupplier.supplier_name,
+                price: parseFloat(validSupplier.price),
+                productId: productId
+            }
+        });
+    })
+);
+
 module.exports = router;
