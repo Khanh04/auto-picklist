@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
-import { CssBaseline, Container, Box, Tabs, Tab, Paper } from '@mui/material'
-import { Upload, Preview, Storage } from '@mui/icons-material'
+import { CssBaseline } from '@mui/material'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
@@ -22,30 +22,15 @@ const theme = createTheme({
   },
 })
 
-function App() {
-  const [currentView, setCurrentView] = useState(() => {
-    // Check if this is a shared shopping list URL
-    const path = window.location.pathname;
-    const shareMatch = path.match(/^\/shopping\/([a-f0-9]+)$/);
-    if (shareMatch) {
-      return 'shared-shopping';
-    }
-    return 'upload';
-  }); // 'upload', 'processing', 'preview', 'shopping', 'shared-shopping', 'database', 'error'
+// Main App Content Component
+function AppContent() {
+  const navigate = useNavigate()
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [editedPicklist, setEditedPicklist] = useState(null) // Store edited picklist state
-  const [shareId, setShareId] = useState(() => {
-    // Extract share ID from URL
-    const path = window.location.pathname;
-    const shareMatch = path.match(/^\/shopping\/([a-f0-9]+)$/);
-    return shareMatch ? shareMatch[1] : null;
-  });
+  const [editedPicklist, setEditedPicklist] = useState(null)
 
   const handleFileUpload = async (file) => {
-    setIsProcessing(true)
-    setCurrentView('processing')
+    navigate('/processing')
     setError(null)
 
     try {
@@ -64,121 +49,167 @@ function App() {
       if (result.success) {
         console.log('Picklist items:', result.picklist)
         setResults(result)
-        setEditedPicklist(null) // Reset edited picklist for new upload
-        setCurrentView('upload') // Stay on upload tab but show preview
+        setEditedPicklist(null)
+        navigate('/')
       } else {
         setError(result.error || 'Failed to process file')
-        setCurrentView('error')
+        navigate('/error')
       }
     } catch (err) {
       console.error('Upload error:', err)
       setError('Network error. Please try again.')
-      setCurrentView('error')
-    } finally {
-      setIsProcessing(false)
+      navigate('/error')
     }
   }
 
   const handleReset = () => {
-    setCurrentView('upload')
     setResults(null)
     setEditedPicklist(null)
     setError(null)
-    setIsProcessing(false)
+    navigate('/')
   }
 
-  // Export is now handled directly in PicklistPreview component
-  // This function is no longer needed but kept for compatibility
   const handleExportPicklist = () => {
     // No-op - export handled in preview component
-  }
-
-  // Removed handleBackToPreview since Results component is no longer used
-
-  const handleNavigate = (view) => {
-    setCurrentView(view)
-    // Only reset states when explicitly resetting (not when just switching tabs)
-    // State will be preserved when switching between upload/database tabs
   }
 
   const handlePicklistUpdate = (updatedPicklist) => {
     setEditedPicklist(updatedPicklist)
   }
 
-  // Don't show header and footer for shared shopping lists
-  if (currentView === 'shared-shopping') {
+  // Shared Shopping List Component
+  const SharedShoppingListPage = () => {
+    const { shareId } = useParams()
     return (
       <SharedShoppingList 
         shareId={shareId} 
         onError={(error) => {
-          setError(error);
-          setCurrentView('error');
+          setError(error)
+          navigate('/error')
         }}
       />
-    );
+    )
   }
 
-  return (
+  // Processing Component
+  const ProcessingPage = () => (
     <div className="min-h-screen gradient-bg">
-      <Header currentView={currentView} onNavigate={handleNavigate} />
+      <Header />
       <main className="flex-1">
-        {currentView === 'upload' && !results && (
-          <FileUpload onFileUpload={handleFileUpload} />
-        )}
-        
-        {currentView === 'upload' && results && (
-          <PicklistPreview
-            results={results}
-            editedPicklist={editedPicklist}
-            onPicklistUpdate={handlePicklistUpdate}
-            onExport={handleExportPicklist}
-            onBack={handleReset}
-            onNavigate={handleNavigate}
-          />
-        )}
-        
-        {currentView === 'processing' && (
-          <div className="max-w-2xl mx-auto p-8">
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
-                <span className="spinner"></span>
-                Processing your file...
-              </div>
+        <div className="max-w-2xl mx-auto p-8">
+          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+            <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
+              <span className="spinner"></span>
+              Processing your file...
             </div>
           </div>
-        )}
-        
-        {currentView === 'preview' && (
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+
+  // Home Page Component
+  const HomePage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        {!results ? (
+          <FileUpload onFileUpload={handleFileUpload} />
+        ) : (
           <PicklistPreview
             results={results}
             editedPicklist={editedPicklist}
             onPicklistUpdate={handlePicklistUpdate}
             onExport={handleExportPicklist}
             onBack={handleReset}
-            onNavigate={handleNavigate}
-          />
-        )}
-
-        {currentView === 'shopping' && (
-          <ShoppingList
-            picklist={editedPicklist || (results && results.picklist) || []}
-            onBack={() => handleNavigate('upload')}
-          />
-        )}
-
-        {currentView === 'database' && (
-          <DatabaseManager onBack={() => handleNavigate('upload')} />
-        )}
-        
-        {currentView === 'error' && (
-          <ErrorDisplay 
-            error={error} 
-            onTryAgain={handleReset}
+            onNavigate={(view) => navigate(`/${view}`)}
           />
         )}
       </main>
       <Footer />
     </div>
+  )
+
+  // Preview Page Component
+  const PreviewPage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        <PicklistPreview
+          results={results}
+          editedPicklist={editedPicklist}
+          onPicklistUpdate={handlePicklistUpdate}
+          onExport={handleExportPicklist}
+          onBack={handleReset}
+          onNavigate={(view) => navigate(`/${view}`)}
+        />
+      </main>
+      <Footer />
+    </div>
+  )
+
+  // Shopping List Page Component
+  const ShoppingListPage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        <ShoppingList
+          picklist={editedPicklist || (results && results.picklist) || []}
+          onBack={() => navigate('/')}
+        />
+      </main>
+      <Footer />
+    </div>
+  )
+
+  // Database Manager Page Component
+  const DatabasePage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        <DatabaseManager onBack={() => navigate('/')} />
+      </main>
+      <Footer />
+    </div>
+  )
+
+  // Error Page Component
+  const ErrorPage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        <ErrorDisplay 
+          error={error} 
+          onTryAgain={handleReset}
+        />
+      </main>
+      <Footer />
+    </div>
+  )
+
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/processing" element={<ProcessingPage />} />
+      <Route path="/preview" element={<PreviewPage />} />
+      <Route path="/shopping" element={<ShoppingListPage />} />
+      <Route path="/database" element={<DatabasePage />} />
+      <Route path="/error" element={<ErrorPage />} />
+      <Route path="/shopping/:shareId" element={<SharedShoppingListPage />} />
+    </Routes>
+  )
+}
+
+// Main App Component with Router
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <AppContent />
+      </Router>
+    </ThemeProvider>
   )
 }
 

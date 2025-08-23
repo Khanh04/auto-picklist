@@ -1,6 +1,17 @@
 import React from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
-function Header({ currentView, onNavigate }) {
+function Header() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  
+  const getCurrentView = () => {
+    if (location.pathname === '/database') return 'database'
+    return 'upload' // Default to upload for home and other routes
+  }
+  
+  const currentView = getCurrentView()
+  
   return (
     <header className="px-4 py-6">
       {/* Navigation Bar */}
@@ -11,7 +22,7 @@ function Header({ currentView, onNavigate }) {
           </h1>
           <div className="hidden md:flex items-center gap-6">
             <button
-              onClick={() => onNavigate('upload')}
+              onClick={() => navigate('/')}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
                 currentView === 'upload' 
                   ? 'bg-white text-blue-600 shadow-md' 
@@ -21,7 +32,7 @@ function Header({ currentView, onNavigate }) {
               Upload
             </button>
             <button
-              onClick={() => onNavigate('database')}
+              onClick={() => navigate('/database')}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
                 currentView === 'database' 
                   ? 'bg-white text-blue-600 shadow-md' 
@@ -37,7 +48,10 @@ function Header({ currentView, onNavigate }) {
         <div className="md:hidden">
           <select
             value={currentView}
-            onChange={(e) => onNavigate(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === 'upload') navigate('/')
+              else navigate(`/${e.target.value}`)
+            }}
             className="bg-white bg-opacity-20 text-white rounded-lg px-3 py-2 text-sm font-medium border border-white border-opacity-30"
           >
             <option value="upload" className="text-gray-800">Upload</option>

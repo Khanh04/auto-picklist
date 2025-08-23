@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const WebSocket = require('ws');
+const http = require('http');
 
 // Import configuration and middleware
 const config = require('./src/config');
@@ -288,12 +290,131 @@ process.on('SIGINT', () => {
     });
 });
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// Store active shopping list connections
+const shoppingListConnections = new Map();
+
+wss.on('connection', (ws, req) => {
+    console.log('WebSocket connection established');
+    
+    ws.on('message', async (data) => {
+        try {
+            const message = JSON.parse(data.toString());
+            
+            switch (message.type) {
+                case 'join_shopping_list':
+                    const shareId = message.shareId;
+                    if (!shoppingListConnections.has(shareId)) {
+                        shoppingListConnections.set(shareId, new Set());
+                    }
+                    shoppingListConnections.get(shareId).add(ws);
+                    ws.shareId = shareId;
+                    console.log(`Client joined shopping list: ${shareId}`);
+                    break;
+                    
+                case 'update_item':
+                    if (ws.shareId) {
+                        const connections = shoppingListConnections.get(ws.shareId);
+                        if (connections) {
+                            connections.forEach((client) => {
+                                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                                    client.send(JSON.stringify({
+                                        type: 'item_updated',
+                                        data: message.data
+                                    }));
+                                }
+                            });
+                        }
+                    }
+                    break;
+                    
+                case 'toggle_completed':
+                    if (ws.shareId) {
+                        const { index, checked } = message.data;
+                        
+                        // Update database via API call
+                        try {
+                            const fetch = require('node-fetch');
+                            const response = await fetch(`http://localhost:${config.server.port}/api/shopping-list/share/${ws.shareId}/item/${index}`, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ isChecked: checked })
+                            });
+
+                            if (response.ok) {
+                                const result = await response.json();
+                                
+                                // Broadcast the database-confirmed update to all clients
+                                const connections = shoppingListConnections.get(ws.shareId);
+                                if (connections) {
+                                    connections.forEach((client) => {
+                                        if (client.readyState === WebSocket.OPEN) {
+                                            client.send(JSON.stringify({
+                                                type: 'item_toggled',
+                                                data: {
+                                                    index: result.data.itemIndex,
+                                                    checked: result.data.isChecked,
+                                                    checkedAt: result.data.checkedAt,
+                                                    updatedAt: result.data.updatedAt
+                                                }
+                                            }));
+                                        }
+                                    });
+                                }
+                            } else {
+                                // Send error back to the client that initiated the request
+                                ws.send(JSON.stringify({
+                                    type: 'error',
+                                    data: { message: 'Failed to update item state' }
+                                }));
+                            }
+                        } catch (error) {
+                            console.error('Error updating item in database:', error);
+                            ws.send(JSON.stringify({
+                                type: 'error',
+                                data: { message: 'Database update failed' }
+                            }));
+                        }
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('WebSocket message error:', error);
+        }
+    });
+    
+    ws.on('close', () => {
+        if (ws.shareId) {
+            const connections = shoppingListConnections.get(ws.shareId);
+            if (connections) {
+                connections.delete(ws);
+                if (connections.size === 0) {
+                    shoppingListConnections.delete(ws.shareId);
+                }
+            }
+            console.log(`Client left shopping list: ${ws.shareId}`);
+        }
+    });
+    
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
+});
+
 // Start server
-const server = app.listen(port, () => {
+server.listen(port, () => {
     console.log(`🚀 ${config.app.name} v${config.app.version}`);
     console.log(`🌐 Server running on http://${config.server.host}:${port}`);
     console.log(`📊 Environment: ${config.NODE_ENV}`);
     console.log(`💾 Database: ${config.database.host}:${config.database.port}/${config.database.name}`);
+    console.log(`🔌 WebSocket server ready for real-time connections`);
     
     if (config.features.enableHealthCheck) {
         console.log(`🏥 Health check: http://${config.server.host}:${port}/health`);

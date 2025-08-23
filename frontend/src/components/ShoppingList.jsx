@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useWebSocket from '../hooks/useWebSocket';
 
 function ShoppingList({ picklist, onBack, shareId = null }) {
   const [checkedItems, setCheckedItems] = useState(new Set());
@@ -10,20 +11,86 @@ function ShoppingList({ picklist, onBack, shareId = null }) {
   const [shareUrl, setShareUrl] = useState('');
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [listTitle, setListTitle] = useState('Shopping List');
+  const [connectionStatus, setConnectionStatus] = useState('');
 
-  // Load checked items from localStorage on mount
+  // Initialize WebSocket connection for shared lists
+  const { isConnected, connectionError, subscribe, toggleCompleted } = useWebSocket(shareId);
+
+  // Set up WebSocket event handlers for shared lists
   useEffect(() => {
-    const storageKey = shareId ? `shopping-list-checked-${shareId}` : 'shopping-list-checked';
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const savedSet = new Set(JSON.parse(saved));
-        setCheckedItems(savedSet);
-      } catch (error) {
-        console.error('Error loading saved checked items:', error);
+    if (!shareId) return;
+
+    // Handle real-time item toggle updates from other users
+    const unsubscribeToggle = subscribe('item_toggled', (data) => {
+      const { index, checked } = data;
+      console.log('Received real-time update:', data);
+      setCheckedItems(prevItems => {
+        const newItems = new Set(prevItems);
+        if (checked) {
+          newItems.add(index);
+        } else {
+          newItems.delete(index);
+        }
+        return newItems;
+      });
+    });
+
+    // Handle errors from WebSocket
+    const unsubscribeError = subscribe('error', (data) => {
+      console.error('WebSocket error:', data.message);
+      // Optionally show user-friendly error message
+    });
+
+    return () => {
+      unsubscribeToggle();
+      unsubscribeError();
+    };
+  }, [shareId, subscribe]);
+
+  // Update connection status display
+  useEffect(() => {
+    if (!shareId) {
+      setConnectionStatus('');
+      return;
+    }
+
+    if (connectionError) {
+      setConnectionStatus('Connection failed');
+    } else if (isConnected) {
+      setConnectionStatus('Connected - Real-time updates active');
+    } else {
+      setConnectionStatus('Connecting...');
+    }
+  }, [shareId, isConnected, connectionError]);
+
+  // Load checked items - from database for shared lists, localStorage for local lists
+  useEffect(() => {
+    if (shareId) {
+      // For shared lists, the state is loaded from the database via the picklist prop
+      // which already includes isChecked state from the API
+      const checkedIndices = new Set();
+      if (picklist) {
+        picklist.forEach((item, index) => {
+          if (item.isChecked) {
+            checkedIndices.add(index);
+          }
+        });
+        setCheckedItems(checkedIndices);
+      }
+    } else {
+      // For local lists, use localStorage
+      const storageKey = 'shopping-list-checked';
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const savedSet = new Set(JSON.parse(saved));
+          setCheckedItems(savedSet);
+        } catch (error) {
+          console.error('Error loading saved checked items:', error);
+        }
       }
     }
-  }, [shareId]);
+  }, [shareId, picklist]);
 
   // Group items by supplier and calculate costs
   useEffect(() => {
@@ -55,24 +122,49 @@ function ShoppingList({ picklist, onBack, shareId = null }) {
     setCheckedCost(checked);
   }, [picklist, checkedItems]);
 
-  // Save checked items to localStorage
+  // Save checked items to localStorage (only for local lists)
   useEffect(() => {
-    const storageKey = shareId ? `shopping-list-checked-${shareId}` : 'shopping-list-checked';
-    localStorage.setItem(storageKey, JSON.stringify([...checkedItems]));
+    if (!shareId) {
+      const storageKey = 'shopping-list-checked';
+      localStorage.setItem(storageKey, JSON.stringify([...checkedItems]));
+    }
   }, [checkedItems, shareId]);
 
   const handleItemCheck = (index) => {
     const newCheckedItems = new Set(checkedItems);
-    if (newCheckedItems.has(index)) {
-      newCheckedItems.delete(index);
-    } else {
+    const willBeChecked = !newCheckedItems.has(index);
+    
+    if (willBeChecked) {
       newCheckedItems.add(index);
+    } else {
+      newCheckedItems.delete(index);
     }
+    
     setCheckedItems(newCheckedItems);
+
+    // Send real-time update for shared lists
+    if (shareId && toggleCompleted) {
+      toggleCompleted({
+        index: index,
+        checked: willBeChecked,
+        timestamp: Date.now()
+      });
+    }
   };
 
   const handleClearAll = () => {
     if (confirm('Clear all checked items?')) {
+      // For shared lists, send WebSocket updates for each checked item
+      if (shareId && toggleCompleted && checkedItems.size > 0) {
+        checkedItems.forEach(index => {
+          toggleCompleted({
+            index: index,
+            checked: false,
+            timestamp: Date.now()
+          });
+        });
+      }
+      
       setCheckedItems(new Set());
     }
   };
@@ -82,10 +174,21 @@ function ShoppingList({ picklist, onBack, shareId = null }) {
     const allChecked = supplierItems.every(item => newCheckedItems.has(item.index));
     
     supplierItems.forEach(item => {
+      const willBeChecked = !allChecked;
+      
       if (allChecked) {
         newCheckedItems.delete(item.index);
       } else {
         newCheckedItems.add(item.index);
+      }
+
+      // Send real-time update for each item in shared lists
+      if (shareId && toggleCompleted) {
+        toggleCompleted({
+          index: item.index,
+          checked: willBeChecked,
+          timestamp: Date.now()
+        });
       }
     });
     
@@ -246,15 +349,37 @@ function ShoppingList({ picklist, onBack, shareId = null }) {
 
       {/* Options Bar */}
       <div className="bg-white border-b px-4 py-2">
-        <label className="flex items-center text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-            className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          Show completed items
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            Show completed items
+          </label>
+          
+          {/* Connection Status for Shared Lists */}
+          {shareId && connectionStatus && (
+            <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+              isConnected 
+                ? 'bg-green-100 text-green-700' 
+                : connectionError 
+                ? 'bg-red-100 text-red-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isConnected 
+                  ? 'bg-green-500' 
+                  : connectionError 
+                  ? 'bg-red-500'
+                  : 'bg-yellow-500'
+              }`}></div>
+              {isConnected ? 'Live' : connectionError ? 'Offline' : 'Connecting'}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Shopping List Content */}
