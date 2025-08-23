@@ -18,6 +18,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const [supplierModalData, setSupplierModalData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
 
   // Initialize WebSocket connection for shared lists
   const { isConnected, connectionError, subscribe, toggleCompleted, switchSupplier } = useWebSocket(shareId);
@@ -255,6 +256,18 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     const total = currentPicklist.length;
     const checked = checkedItems.size;
     return { total, checked, remaining: total - checked };
+  };
+
+  const toggleSupplierCollapse = (supplier) => {
+    setCollapsedSuppliers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(supplier)) {
+        newSet.delete(supplier);
+      } else {
+        newSet.add(supplier);
+      }
+      return newSet;
+    });
   };
 
   const handleSupplierNotAvailable = async (item, index) => {
@@ -692,6 +705,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           const supplierTotal = items.length;
           const allChecked = supplierChecked === supplierTotal;
           const someChecked = supplierChecked > 0;
+          const isCollapsed = collapsedSuppliers.has(supplier);
 
           return (
             <div key={supplier} className="bg-white rounded-lg shadow-sm mb-4 overflow-hidden">
@@ -714,115 +728,130 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                         {someChecked && !allChecked && '-'}
                       </div>
                     </button>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{supplier}</h3>
                       <p className="text-sm text-gray-600">
                         {supplierChecked}/{supplierTotal} items
                       </p>
                     </div>
                   </div>
-                  <div className="text-right text-sm text-gray-600">
-                    {items.length} item{items.length !== 1 ? 's' : ''}
+                  <div className="flex items-center gap-2">
+                    <div className="text-right text-sm text-gray-600">
+                      {items.length} item{items.length !== 1 ? 's' : ''}
+                    </div>
+                    <button
+                      onClick={() => toggleSupplierCollapse(supplier)}
+                      className="p-1 hover:bg-gray-200 rounded-md transition-colors focus:outline-none"
+                      title={isCollapsed ? 'Expand supplier' : 'Collapse supplier'}
+                    >
+                      <div className={`transform transition-transform duration-200 ${
+                        isCollapsed ? 'rotate-0' : 'rotate-90'
+                      }`}>
+                        ▶
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Items List */}
-              <div className="divide-y divide-gray-100">
-                {items
-                  .filter(item => showCompleted || !checkedItems.has(item.index))
-                  .map((item) => {
-                    const isChecked = checkedItems.has(item.index);
-                    return (
-                      <div
-                        key={item.index}
-                        className={`px-4 py-3 transition-all duration-200 ${
-                          isChecked ? 'bg-gray-50 opacity-75' : 'bg-white hover:bg-gray-50'
-                        }`}
-                        onClick={() => handleItemCheck(item.index)}
-                      >
-                        <div className="flex items-start space-x-3">
-                          {/* Checkbox */}
-                          <div className="flex-shrink-0 mt-1">
-                            <div className={`w-6 h-6 border-2 rounded flex items-center justify-center transition-colors cursor-pointer ${
-                              isChecked 
-                                ? 'bg-green-500 border-green-500 text-white' 
-                                : 'border-gray-300 hover:border-green-400'
-                            }`}>
-                              {isChecked && '✓'}
+              {/* Items List - Collapsible */}
+              {!isCollapsed && (
+                <div className="divide-y divide-gray-100">
+                  {items
+                    .filter(item => showCompleted || !checkedItems.has(item.index))
+                    .map((item) => {
+                      const isChecked = checkedItems.has(item.index);
+                      return (
+                        <div
+                          key={item.index}
+                          className={`px-4 py-3 transition-all duration-200 ${
+                            isChecked ? 'bg-gray-50 opacity-75' : 'bg-white hover:bg-gray-50'
+                          }`}
+                          onClick={() => handleItemCheck(item.index)}
+                        >
+                          <div className="flex items-start space-x-3">
+                            {/* Checkbox */}
+                            <div className="flex-shrink-0 mt-1">
+                              <div className={`w-6 h-6 border-2 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                                isChecked 
+                                  ? 'bg-green-500 border-green-500 text-white' 
+                                  : 'border-gray-300 hover:border-green-400'
+                              }`}>
+                                {isChecked && '✓'}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Item Details */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0 mr-2">
-                                <h4 className={`text-sm font-medium leading-5 ${
-                                  isChecked ? 'line-through text-gray-500' : 'text-gray-900'
-                                }`}>
-                                  {item.originalItem || item.item}
-                                </h4>
-                                {item.matchedDescription && item.matchedDescription !== item.originalItem && (
-                                  <p className={`text-xs mt-1 ${
+                            {/* Item Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0 mr-2">
+                                  <h4 className={`text-sm font-medium leading-5 ${
+                                    isChecked ? 'line-through text-gray-500' : 'text-gray-900'
+                                  }`}>
+                                    {item.originalItem || item.item}
+                                  </h4>
+                                  {item.matchedDescription && item.matchedDescription !== item.originalItem && (
+                                    <p className={`text-xs mt-1 ${
+                                      isChecked ? 'text-gray-400' : 'text-gray-600'
+                                    }`}>
+                                      Matched: {item.matchedDescription}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <div className={`text-sm font-medium ${
+                                    isChecked ? 'line-through text-gray-500' : 'text-gray-900'
+                                  }`}>
+                                    {typeof item.unitPrice === 'number' 
+                                      ? `$${item.unitPrice.toFixed(2)}` 
+                                      : item.unitPrice}
+                                  </div>
+                                  <div className={`text-xs ${
                                     isChecked ? 'text-gray-400' : 'text-gray-600'
                                   }`}>
-                                    Matched: {item.matchedDescription}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <div className={`text-sm font-medium ${
-                                  isChecked ? 'line-through text-gray-500' : 'text-gray-900'
-                                }`}>
-                                  {typeof item.unitPrice === 'number' 
-                                    ? `$${item.unitPrice.toFixed(2)}` 
-                                    : item.unitPrice}
+                                    Qty: {item.quantity}
+                                  </div>
                                 </div>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between">
                                 <div className={`text-xs ${
                                   isChecked ? 'text-gray-400' : 'text-gray-600'
                                 }`}>
-                                  Qty: {item.quantity}
+                                  Total: {item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : 'N/A'}
                                 </div>
-                              </div>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between">
-                              <div className={`text-xs ${
-                                isChecked ? 'text-gray-400' : 'text-gray-600'
-                              }`}>
-                                Total: {item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : 'N/A'}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {/* Not Available Button */}
-                                {!isChecked && item.matchedItemId && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSupplierNotAvailable(item, item.index);
-                                    }}
-                                    disabled={switchingSupplier.has(item.index)}
-                                    className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${
-                                      switchingSupplier.has(item.index)
-                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300'
-                                    }`}
-                                    title="Switch to next lowest price supplier if this item is not available"
-                                  >
-                                    {switchingSupplier.has(item.index) ? '⏳ Switching...' : '❌ Not Available'}
-                                  </button>
-                                )}
-                                {isChecked && (
-                                  <div className="text-xs text-green-600 font-medium">
-                                    ✓ Purchased
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  {/* Not Available Button */}
+                                  {!isChecked && item.matchedItemId && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSupplierNotAvailable(item, item.index);
+                                      }}
+                                      disabled={switchingSupplier.has(item.index)}
+                                      className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${
+                                        switchingSupplier.has(item.index)
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300'
+                                      }`}
+                                      title="Switch to next lowest price supplier if this item is not available"
+                                    >
+                                      {switchingSupplier.has(item.index) ? '⏳ Switching...' : '❌ Not Available'}
+                                    </button>
+                                  )}
+                                  {isChecked && (
+                                    <div className="text-xs text-green-600 font-medium">
+                                      ✓ Purchased
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           );
         })}
