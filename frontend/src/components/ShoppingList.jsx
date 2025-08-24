@@ -27,7 +27,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   useEffect(() => {
     const loadPicklistData = async () => {
       if (shareId) {
-        // For shared lists, fetch data from API
+        // For shared lists, fetch data from API only once
         setIsLoading(true);
         setError(null);
         try {
@@ -51,8 +51,18 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       }
     };
 
-    loadPicklistData();
-  }, [shareId, propPicklist]);
+    // Only load data if we have a shareId and haven't loaded yet, or if there's no shareId
+    if ((shareId && currentPicklist.length === 0) || !shareId) {
+      loadPicklistData();
+    }
+  }, [shareId]); // Removed propPicklist from dependencies to prevent re-fetching
+
+  // Handle prop picklist changes for non-shared lists only
+  useEffect(() => {
+    if (!shareId && propPicklist) {
+      setCurrentPicklist(propPicklist);
+    }
+  }, [propPicklist, shareId]);
 
   // Set up WebSocket event handlers for shared lists
   useEffect(() => {
@@ -283,7 +293,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         },
         body: JSON.stringify({
           currentSupplier: item.selectedSupplier,
-          currentPrice: parseFloat(item.unitPrice)
+          currentPrice: typeof item.unitPrice === 'number' ? item.unitPrice : parseFloat(item.unitPrice) || 0
         })
       });
 
