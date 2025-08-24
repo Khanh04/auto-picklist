@@ -53,5 +53,11 @@ logs
 tmp/
 temp/
 
+# Test coverage
+coverage/
+
+# Test output files
+test-output.*
+
 # Claude settings (optional - keep if you want Claude context)
 .claude/
