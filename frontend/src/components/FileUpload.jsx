@@ -1,24 +1,44 @@
 import React, { useState, useRef } from 'react'
 
-function FileUpload({ onFileUpload }) {
-  const [selectedFile, setSelectedFile] = useState(null)
+function FileUpload({ onFileUpload, onMultiFileUpload }) {
+  const [selectedFiles, setSelectedFiles] = useState([])
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
 
-  const handleFileSelect = (file) => {
-    // Validate file type
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      alert('Please select a CSV file.')
-      return
+  const handleFileSelect = (files) => {
+    const validFiles = []
+    const errors = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      
+      // Validate file type
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        errors.push(`${file.name}: Please select a CSV file.`)
+        continue
+      }
+
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`${file.name}: File size must be less than 10MB.`)
+        continue
+      }
+
+      validFiles.push(file)
     }
 
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB.')
-      return
+    if (errors.length > 0) {
+      alert('Some files were rejected:\n' + errors.join('\n'))
     }
 
-    setSelectedFile(file)
+    // Add to existing files (max 10)
+    const newFiles = [...selectedFiles, ...validFiles]
+    if (newFiles.length > 10) {
+      alert('Maximum 10 CSV files allowed. Some files were not added.')
+      setSelectedFiles(newFiles.slice(0, 10))
+    } else {
+      setSelectedFiles(newFiles)
+    }
   }
 
   const handleDragOver = (e) => {
@@ -37,14 +57,14 @@ function FileUpload({ onFileUpload }) {
     
     const files = e.dataTransfer.files
     if (files.length > 0) {
-      handleFileSelect(files[0])
+      handleFileSelect(files)
     }
   }
 
   const handleFileInputChange = (e) => {
     const files = e.target.files
     if (files.length > 0) {
-      handleFileSelect(files[0])
+      handleFileSelect(files)
     }
   }
 
@@ -54,7 +74,7 @@ function FileUpload({ onFileUpload }) {
   }
 
   const handleUploadAreaClick = () => {
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       fileInputRef.current?.click()
     }
   }
@@ -67,23 +87,39 @@ function FileUpload({ onFileUpload }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null)
+  const handleRemoveFile = (index) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index)
+    setSelectedFiles(newFiles)
+    if (newFiles.length === 0 && fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveAllFiles = () => {
+    setSelectedFiles([])
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
   const handleProcess = () => {
-    if (selectedFile) {
-      onFileUpload(selectedFile)
+    if (selectedFiles.length > 0) {
+      if (selectedFiles.length > 1 && onMultiFileUpload) {
+        onMultiFileUpload(selectedFiles)
+      } else if (onFileUpload) {
+        onFileUpload(selectedFiles[0])
+      }
     }
+  }
+
+  const getTotalSize = () => {
+    return selectedFiles.reduce((total, file) => total + file.size, 0)
   }
 
   return (
     <div className="max-w-2xl mx-auto p-8">
       <div className="bg-white rounded-xl shadow-lg p-8">
-        {!selectedFile ? (
+        {selectedFiles.length === 0 ? (
           <div 
             className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-300 ${
               isDragOver 
@@ -95,8 +131,10 @@ function FileUpload({ onFileUpload }) {
             onDrop={handleDrop}
             onClick={handleUploadAreaClick}
           >
-            <div className="text-6xl mb-4">📄</div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Drop your CSV file here</h3>
+            <div className="text-6xl mb-4">📚</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">
+              Drop your CSV files here
+            </h3>
             <p className="text-gray-600 mb-4">
               or{' '}
               <button 
@@ -107,32 +145,85 @@ function FileUpload({ onFileUpload }) {
                 browse files
               </button>
             </p>
-            <small className="text-gray-500">Accepts CSV files up to 5MB</small>
+            <small className="text-gray-500">
+              Accepts up to 10 CSV files, 10MB each. Single or multiple files supported.
+            </small>
             <input 
               type="file" 
               ref={fileInputRef}
               accept=".csv" 
+              multiple
               className="hidden"
               onChange={handleFileInputChange}
             />
           </div>
         ) : (
-          <div className="bg-gray-50 rounded-lg p-6 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="text-3xl">📄</div>
-              <div>
-                <div className="font-semibold text-gray-800">{selectedFile.name}</div>
-                <div className="text-sm text-gray-600">{formatFileSize(selectedFile.size)}</div>
+          <div className="space-y-4">
+            {/* File List Header */}
+            <div className="flex items-center justify-between bg-gray-100 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="text-2xl">📚</div>
+                <div>
+                  <div className="font-semibold text-gray-800">
+                    {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Total: {formatFileSize(getTotalSize())}
+                  </div>
+                </div>
               </div>
+              <button 
+                type="button" 
+                className="text-red-500 hover:text-red-700 px-3 py-1 rounded-md hover:bg-red-50 transition-colors text-sm font-medium"
+                onClick={handleRemoveAllFiles}
+                title="Remove all files"
+              >
+                Clear All
+              </button>
             </div>
-            <button 
-              type="button" 
-              className="text-red-500 hover:text-red-700 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 transition-colors"
-              onClick={handleRemoveFile}
-              title="Remove file"
-            >
-              ✕
-            </button>
+
+            {/* Individual Files */}
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {selectedFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">📄</div>
+                    <div>
+                      <div className="font-medium text-gray-800">{file.name}</div>
+                      <div className="text-sm text-gray-600">{formatFileSize(file.size)}</div>
+                    </div>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="text-red-500 hover:text-red-700 text-lg font-bold w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-100 transition-colors"
+                    onClick={() => handleRemoveFile(index)}
+                    title="Remove file"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add More Button */}
+            {selectedFiles.length < 10 && (
+              <button
+                type="button"
+                className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:text-gray-800 hover:border-gray-400 transition-all"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                + Add More CSV Files ({10 - selectedFiles.length} remaining)
+              </button>
+            )}
+
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              accept=".csv" 
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
           </div>
         )}
 
@@ -140,14 +231,17 @@ function FileUpload({ onFileUpload }) {
           <button 
             type="button" 
             className={`px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 transform ${
-              selectedFile
+              selectedFiles.length > 0
                 ? 'gradient-bg text-white hover:scale-105 hover:shadow-lg'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
-            disabled={!selectedFile}
+            disabled={selectedFiles.length === 0}
             onClick={handleProcess}
           >
-            Generate Picklist
+            {selectedFiles.length > 1 
+              ? `Generate Combined Picklist (${selectedFiles.length} files)`
+              : 'Generate Picklist'
+            }
           </button>
         </div>
       </div>

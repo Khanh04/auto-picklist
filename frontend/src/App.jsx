@@ -61,6 +61,57 @@ function AppContent() {
     }
   }
 
+  const handleMultiFileUpload = async (files) => {
+    navigate('/processing')
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      files.forEach((file, index) => {
+        formData.append('files', file)
+      })
+      formData.append('useDatabase', 'true')
+
+      console.log(`Uploading ${files.length} CSV files for combined processing...`)
+
+      const response = await fetch('/api/multi-csv/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+      console.log('Multi-CSV upload result:', result)
+
+      if (result.success) {
+        // Transform multi-CSV results to be compatible with existing UI
+        const transformedResult = {
+          success: true,
+          picklist: result.combinedPicklist,
+          summary: result.overallSummary,
+          validation: { isValid: true, errors: [], warnings: [] },
+          multiCsvData: {
+            files: result.files,
+            analytics: result.analytics,
+            metadata: result.metadata,
+            individualSummaries: result.individualSummaries
+          }
+        }
+        
+        console.log('Combined picklist items:', result.combinedPicklist)
+        setResults(transformedResult)
+        setEditedPicklist(null)
+        navigate('/')
+      } else {
+        setError(result.error || 'Failed to process CSV files')
+        navigate('/error')
+      }
+    } catch (err) {
+      console.error('Multi-CSV upload error:', err)
+      setError('Network error. Please try again.')
+      navigate('/error')
+    }
+  }
+
   const handleReset = () => {
     setResults(null)
     setEditedPicklist(null)
@@ -113,7 +164,7 @@ function AppContent() {
       <Header />
       <main className="flex-1">
         {!results ? (
-          <FileUpload onFileUpload={handleFileUpload} />
+          <FileUpload onFileUpload={handleFileUpload} onMultiFileUpload={handleMultiFileUpload} />
         ) : (
           <PicklistPreview
             results={results}

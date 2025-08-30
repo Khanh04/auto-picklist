@@ -48,7 +48,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       setInitialDataFetched(false)
       setLastProcessedPicklistHash(currentHash)
     }
-  }, [results, editedPicklist, currentPicklist, lastProcessedPicklistHash])
+  }, [results, editedPicklist, lastProcessedPicklistHash])
 
   // Handle side effects separately - only run once when picklist is first available
   React.useEffect(() => {
@@ -206,17 +206,24 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     } else if (field === 'selectedSupplier') {
       newPicklist[index].selectedSupplier = value
       
-      // If there's a matched item, update price based on selected supplier
-      if (newPicklist[index].matchedItemId && productSuppliers[newPicklist[index].matchedItemId]) {
+      // Handle "No supplier found" case
+      if (value === 'No supplier found') {
+        newPicklist[index].unitPrice = ''
+        newPicklist[index].totalPrice = 'N/A'
+      } else if (newPicklist[index].matchedItemId && productSuppliers[newPicklist[index].matchedItemId]) {
+        // If there's a matched item, update price based on selected supplier
         const suppliers = productSuppliers[newPicklist[index].matchedItemId]
         const selectedSupplier = suppliers.find(s => s.supplier_name === value)
         
         if (selectedSupplier) {
           newPicklist[index].unitPrice = selectedSupplier.price
           newPicklist[index].totalPrice = (selectedSupplier.price * newPicklist[index].quantity).toFixed(2)
+        } else {
+          // Supplier not found in the product-specific list, keep current price
+          // This preserves the existing price when switching to a general supplier
         }
       } else if (!newPicklist[index].manualOverride) {
-        // Reset price if no specific supplier data available
+        // Reset price if no specific supplier data available and not manually overridden
         newPicklist[index].unitPrice = ''
         newPicklist[index].totalPrice = 'N/A'
       }
@@ -326,6 +333,47 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     handleClearSelection()
   }
 
+  // Helper function to store preferences (manual overrides)
+  const storePreferences = async () => {
+    // Capture manual overrides for machine learning (product matching only)
+    const preferences = currentPicklist
+      .filter(item => item.manualOverride && item.matchedItemId)
+      .map(item => ({
+        originalItem: item.originalItem,
+        matchedProductId: item.matchedItemId
+      }))
+    
+    // Store preferences if any manual overrides were made
+    if (preferences.length > 0) {
+      try {
+        const response = await fetch('/api/preferences', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ preferences })
+        })
+        
+        if (!response.ok) {
+          console.error('Failed to store preferences - server error:', response.status)
+        }
+      } catch (prefError) {
+        console.warn('Failed to store preferences - network error:', prefError)
+        // Don't block operation if preference storage fails
+      }
+    }
+  }
+
+  const handleShoppingList = async () => {
+    // Store preferences before navigating to shopping list
+    await storePreferences()
+    
+    // Navigate to shopping list
+    if (onNavigate) {
+      onNavigate('shopping')
+    }
+  }
+
   const handleExport = async () => {
     setIsExporting(true)
     setExportResult(null)
@@ -333,35 +381,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     try {
       const summary = calculateSummary()
       
-      // Capture manual overrides for machine learning (product matching only)
-      const preferences = currentPicklist
-        .filter(item => item.manualOverride && item.matchedItemId)
-        .map(item => ({
-          originalItem: item.originalItem,
-          matchedProductId: item.matchedItemId
-        }))
-      
-      // Store preferences if any manual overrides were made
-      if (preferences.length > 0) {
-        try {
-          const response = await fetch('/api/preferences', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ preferences })
-          })
-          
-          if (!response.ok) {
-            console.error('Failed to store preferences - server error:', response.status)
-          }
-        } catch (prefError) {
-          console.warn('Failed to store preferences - network error:', prefError)
-          // Don't block export if preference storage fails
-        }
-      } else {
-        // No manual overrides to store
-      }
+      // Store preferences before export
+      await storePreferences()
       
       // Prepare export data with final item name (use matched item description if available, otherwise original)
       const exportPicklist = currentPicklist.map(item => {
@@ -606,8 +627,54 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
         <div className="bg-white rounded-xl shadow-lg p-6">
           {/* Header */}
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">Picklist Preview</h2>
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">
+              {results?.multiCsvData ? 'Combined Picklist Preview' : 'Picklist Preview'}
+            </h2>
             <p className="text-gray-600 text-lg">Review and edit your picklist before exporting</p>
+            
+            {/* Multi-CSV Analytics */}
+            {results?.multiCsvData && (
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mt-6 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-2xl">📊</span>
+                  <h3 className="text-lg font-semibold text-purple-800">Multi-CSV Analysis</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-purple-600">
+                      {results.multiCsvData.metadata.filesProcessed}
+                    </div>
+                    <div className="text-purple-700">Files Processed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-blue-600">
+                      {results.multiCsvData.metadata.totalOriginalItems}
+                    </div>
+                    <div className="text-blue-700">Total Items</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-green-600">
+                      {results.multiCsvData.metadata.totalUniqueItems}
+                    </div>
+                    <div className="text-green-700">Unique Items</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-orange-600">
+                      {results.multiCsvData.analytics?.supplierAnalysis?.totalSuppliers || 0}
+                    </div>
+                    <div className="text-orange-700">Suppliers</div>
+                  </div>
+                </div>
+                
+                {results.multiCsvData.files.length > 1 && (
+                  <div className="mt-3 pt-3 border-t border-purple-200">
+                    <p className="text-xs text-purple-600 text-center">
+                      Files: {results.multiCsvData.files.map(f => f.filename).join(', ')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -819,7 +886,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
               Back to Upload
             </button>
             <button
-              onClick={() => onNavigate && onNavigate('shopping')}
+              onClick={handleShoppingList}
               className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
             >
               🛒 Shopping List

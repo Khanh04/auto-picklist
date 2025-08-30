@@ -16,6 +16,7 @@ const preferencesRoutes = require('./src/routes/preferences');
 const picklistRoutes = require('./src/routes/picklist');
 const shoppingListRoutes = require('./src/routes/shoppingList');
 const databaseRoutes = require('./src/routes/database');
+const multiCsvRoutes = require('./src/routes/multiCsv');
 
 const app = express();
 const port = config.server.port;
@@ -117,6 +118,7 @@ app.use('/api/preferences', preferencesRoutes);
 app.use('/api/picklist', picklistRoutes);
 app.use('/api/shopping-list', shoppingListRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/multi-csv', multiCsvRoutes);
 
 // Legacy API endpoints for backward compatibility
 app.get('/api/get-preference/:originalItem', (req, res, next) => {
@@ -275,28 +277,57 @@ app.get('*', (req, res) => {
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-    console.log('🔄 SIGTERM received, shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed');
-        process.exit(0);
-    });
-});
-
-process.on('SIGINT', () => {
-    console.log('🔄 SIGINT received, shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed');
-        process.exit(0);
-    });
-});
-
 // Create HTTP server
 const server = http.createServer(app);
 
+// Graceful shutdown handling
+const gracefulShutdown = () => {
+    console.log('🔄 Shutdown signal received, shutting down gracefully...');
+    
+    // Close WebSocket server
+    if (wss) {
+        wss.close(() => {
+            console.log('✅ WebSocket server closed');
+        });
+    }
+    
+    // Close HTTP server
+    server.close((err) => {
+        if (err) {
+            console.error('❌ Error during server shutdown:', err);
+            process.exit(1);
+        }
+        console.log('✅ HTTP server closed');
+        process.exit(0);
+    });
+    
+    // Force close after timeout
+    setTimeout(() => {
+        console.error('❌ Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+    }, 10000);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+    gracefulShutdown();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown();
+});
+
 // Create WebSocket server
 const wss = new WebSocket.Server({ server });
+
+// Set max listeners to prevent warnings
+wss.setMaxListeners(20);
+server.setMaxListeners(20);
 
 // Store active shopping list connections
 const shoppingListConnections = new Map();
