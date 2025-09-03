@@ -19,6 +19,27 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
+  const [partialQuantities, setPartialQuantities] = useState(new Map()); // Track partial quantities picked
+  
+  // Helper functions for cleaner partial quantity logic
+  const getPurchasedQuantity = (index) => partialQuantities.get(index) || 0;
+  const getRemainingQuantity = (item, index) => {
+    const total = parseInt(item.quantity) || 1;
+    const purchased = getPurchasedQuantity(index);
+    return Math.max(0, total - purchased);
+  };
+  const isFullyPurchased = (item, index) => {
+    const total = parseInt(item.quantity) || 1;
+    const purchased = getPurchasedQuantity(index);
+    return purchased >= total;
+  };
+  const isPartiallyPurchased = (item, index) => {
+    const purchased = getPurchasedQuantity(index);
+    return purchased > 0 && !isFullyPurchased(item, index);
+  };
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [quantityModalData, setQuantityModalData] = useState(null);
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
 
   // Unified data sync manager - handles all update scenarios
   const syncPicklistData = async (updateFunction, options = {}) => {
@@ -123,6 +144,15 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           
           if (result.success && result.data && result.data.picklist) {
             setCurrentPicklist(result.data.picklist);
+            
+            // Restore partial quantities from database
+            const newPartialQuantities = new Map();
+            result.data.picklist.forEach((item, index) => {
+              if (item.purchasedQuantity && item.purchasedQuantity > 0) {
+                newPartialQuantities.set(index, item.purchasedQuantity);
+              }
+            });
+            setPartialQuantities(newPartialQuantities);
           } else {
             setError(result.error || 'Failed to load shopping list');
           }
@@ -169,16 +199,28 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         
         if (result.success && result.data && result.data.picklist) {
           console.log('Refreshed picklist data from database');
+          console.log('📊 Received picklist data:', result.data.picklist.length, 'items');
+          console.log('📊 First few items with purchasedQuantity:', result.data.picklist.slice(0, 5).map((item, idx) => ({
+            index: idx,
+            purchasedQuantity: item.purchasedQuantity,
+            isChecked: item.isChecked,
+            quantity: item.quantity
+          })));
           setCurrentPicklist(result.data.picklist);
           
-          // Update checked items state based on fresh data
-          const checkedIndices = new Set();
+          // Update checked items state from database
+          const dbCheckedIndices = new Set();
+          const newPartialQuantities = new Map();
           result.data.picklist.forEach((item, index) => {
             if (item.isChecked) {
-              checkedIndices.add(index);
+              dbCheckedIndices.add(index);
+            }
+            if (item.purchasedQuantity && item.purchasedQuantity > 0) {
+              newPartialQuantities.set(index, item.purchasedQuantity);
             }
           });
-          setCheckedItems(checkedIndices);
+          setCheckedItems(dbCheckedIndices);
+          setPartialQuantities(newPartialQuantities);
         }
       } catch (error) {
         console.error('Error refreshing picklist data:', error);
@@ -256,14 +298,55 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         grouped[supplier] = [];
       }
       
-      const itemWithIndex = { ...item, index };
-      grouped[supplier].push(itemWithIndex);
+      const unitPrice = parseFloat(item.unitPrice) || 0;
+      const purchasedQty = getPurchasedQuantity(index);
+      const remainingQty = getRemainingQuantity(item, index);
+      
+      if (isPartiallyPurchased(item, index)) {
+        // Split into purchased (checked) and remaining (unchecked) portions
+        
+        // Purchased portion (checked)
+        if (purchasedQty > 0) {
+          const purchasedItem = {
+            ...item,
+            index: index,
+            quantity: purchasedQty,
+            totalPrice: (unitPrice * purchasedQty).toFixed(2),
+            isPurchasedPortion: true
+          };
+          grouped[supplier].push(purchasedItem);
+        }
+        
+        // Remaining portion (unchecked)
+        if (remainingQty > 0) {
+          const remainingItem = {
+            ...item,
+            index: `${index}_remaining`,
+            quantity: remainingQty,
+            totalPrice: (unitPrice * remainingQty).toFixed(2),
+            isRemainingPortion: true,
+            originalIndex: index
+          };
+          grouped[supplier].push(remainingItem);
+        }
+        
+        // Calculate costs - original total for overall, purchased portion for checked
+        const originalPrice = parseFloat(item.totalPrice) || 0;
+        const purchasedPrice = unitPrice * purchasedQty;
+        total += originalPrice;
+        checked += purchasedPrice;
+        
+      } else {
+        // Regular item (not partially purchased)
+        const itemWithIndex = { ...item, index };
+        grouped[supplier].push(itemWithIndex);
 
-      // Calculate costs
-      const price = parseFloat(item.totalPrice) || 0;
-      total += price;
-      if (checkedItems.has(index)) {
-        checked += price;
+        // Calculate costs
+        const price = parseFloat(item.totalPrice) || 0;
+        total += price;
+        if (isFullyPurchased(item, index) || checkedItems.has(index)) {
+          checked += price;
+        }
       }
     });
 
@@ -293,42 +376,82 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   }, [checkedItems, shareId]);
 
   const handleItemCheck = async (index) => {
-    const willBeChecked = !checkedItems.has(index);
+    const item = currentPicklist[index];
+    const willBeChecked = !checkedItems.has(index) && !isFullyPurchased(item, index);
+    const remainingQty = getRemainingQuantity(item, index);
+    const purchasedQty = getPurchasedQuantity(index);
     
-    // Update local checkedItems state immediately for UI responsiveness
+    
+    // If item has remaining quantity > 1, show quantity modal
+    if (willBeChecked && remainingQty > 1) {
+      setSelectedQuantity(remainingQty); // Default to full quantity
+      setQuantityModalData({
+        item,
+        index,
+        maxQuantity: remainingQty,
+        currentQuantity: purchasedQty,
+        isAdditional: purchasedQty > 0
+      });
+      setShowQuantityModal(true);
+      return;
+    }
+    
+    // For regular items or unchecking, proceed normally
     const newCheckedItems = new Set(checkedItems);
     if (willBeChecked) {
       newCheckedItems.add(index);
     } else {
       newCheckedItems.delete(index);
+      // Clear partial quantity when unchecking
+      setPartialQuantities(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(index);
+        return newMap;
+      });
     }
     setCheckedItems(newCheckedItems);
 
-    // Use unified sync system to update the picklist data
-    const result = await syncPicklistData(
-      prevPicklist => {
-        const newPicklist = [...prevPicklist];
-        if (newPicklist[index]) {
-          newPicklist[index] = {
-            ...newPicklist[index],
-            isChecked: willBeChecked
-          };
-        }
-        return newPicklist;
-      },
-      {
-        broadcastToOthers: true,
-        itemIndex: index,
-        suppressWebSocket: false
-      }
-    );
+    // For shared lists, use the dedicated item check API
+    if (shareId) {
+      try {
+        // Calculate purchased quantity based on checked state
+        const item = currentPicklist[index];
+        const totalQuantity = parseInt(item.quantity) || 1;
+        const purchasedQuantity = willBeChecked ? totalQuantity : 0;
+        
+        const response = await fetch(`/api/shopping-list/share/${shareId}/item/${index}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ purchasedQuantity })
+        });
 
-    if (!result.success) {
-      console.error(`❌ Failed to sync item ${index} check state`);
-      // Revert local state on failure
-      setCheckedItems(checkedItems);
+        if (response.ok) {
+          console.log(`✅ Synced item ${index} check state to database: ${willBeChecked ? 'checked' : 'unchecked'}`);
+          
+          
+          // Broadcast update to other clients
+          if (broadcastUpdate) {
+            broadcastUpdate({
+              itemIndex: index,
+              checked: willBeChecked,
+              timestamp: Date.now(),
+              updateType: 'item_check'
+            });
+            console.log(`📡 Broadcasted item ${index} check state to other clients`);
+          }
+        } else {
+          console.error(`❌ Failed to sync item ${index} check state to database`);
+          // Revert local state on failure
+          setCheckedItems(checkedItems);
+        }
+      } catch (error) {
+        console.error('Error syncing item check state:', error);
+        // Revert local state on failure
+        setCheckedItems(checkedItems);
+      }
     } else {
-      console.log(`✅ Synced item ${index} check state: ${willBeChecked ? 'checked' : 'unchecked'}`);
+      // For non-shared lists, just update localStorage (existing behavior)
+      console.log(`💾 Saved item ${index} check state to localStorage: ${willBeChecked ? 'checked' : 'unchecked'}`);
     }
   };
 
@@ -339,33 +462,49 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       // Clear local state immediately
       setCheckedItems(new Set());
 
-      // Use unified sync system to clear all checked items
-      const result = await syncPicklistData(
-        prevPicklist => {
-          const newPicklist = [...prevPicklist];
-          previousCheckedItems.forEach(index => {
-            if (newPicklist[index]) {
-              newPicklist[index] = {
-                ...newPicklist[index],
-                isChecked: false
-              };
-            }
+      // For shared lists, update each item individually via API
+      if (shareId) {
+        let allSuccessful = true;
+        
+        try {
+          // Update each checked item in the database
+          const updatePromises = Array.from(previousCheckedItems).map(async (index) => {
+            const response = await fetch(`/api/shopping-list/share/${shareId}/item/${index}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ purchasedQuantity: 0 })
+            });
+            return response.ok;
           });
-          return newPicklist;
-        },
-        {
-          broadcastToOthers: true,
-          itemIndex: null, // Multiple items
-          suppressWebSocket: false
-        }
-      );
 
-      if (!result.success) {
-        console.error(`❌ Failed to clear all checked items`);
-        // Revert local state on failure
-        setCheckedItems(previousCheckedItems);
+          const results = await Promise.all(updatePromises);
+          allSuccessful = results.every(success => success);
+
+          if (allSuccessful) {
+            console.log(`✅ Cleared all ${previousCheckedItems.size} checked items in database`);
+            
+            // Broadcast update to other clients
+            if (broadcastUpdate) {
+              broadcastUpdate({
+                itemIndex: null, // Multiple items
+                timestamp: Date.now(),
+                updateType: 'clear_all'
+              });
+              console.log(`📡 Broadcasted clear all to other clients`);
+            }
+          } else {
+            console.error(`❌ Failed to clear some checked items`);
+            // Revert local state on failure
+            setCheckedItems(previousCheckedItems);
+          }
+        } catch (error) {
+          console.error('Error clearing checked items:', error);
+          // Revert local state on failure
+          setCheckedItems(previousCheckedItems);
+        }
       } else {
-        console.log(`✅ Cleared all ${previousCheckedItems.size} checked items`);
+        // For non-shared lists, localStorage is already updated by useEffect
+        console.log(`💾 Cleared all ${previousCheckedItems.size} checked items in localStorage`);
       }
     }
   };
@@ -385,33 +524,55 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     });
     setCheckedItems(newCheckedItems);
 
-    // Use unified sync system to update all items
-    const result = await syncPicklistData(
-      prevPicklist => {
-        const newPicklist = [...prevPicklist];
-        supplierItems.forEach(item => {
-          if (newPicklist[item.index]) {
-            newPicklist[item.index] = {
-              ...newPicklist[item.index],
-              isChecked: willBeChecked
-            };
-          }
+    // For shared lists, update each item individually via API
+    if (shareId) {
+      let allSuccessful = true;
+      
+      try {
+        // Update each item in the database
+        const updatePromises = supplierItems.map(async (item) => {
+          // Calculate purchased quantity based on checked state
+          const itemData = currentPicklist[item.index];
+          const totalQuantity = parseInt(itemData.quantity) || 1;
+          const purchasedQuantity = willBeChecked ? totalQuantity : 0;
+          
+          const response = await fetch(`/api/shopping-list/share/${shareId}/item/${item.index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ purchasedQuantity })
+          });
+          return response.ok;
         });
-        return newPicklist;
-      },
-      {
-        broadcastToOthers: true,
-        itemIndex: null, // Multiple items
-        suppressWebSocket: false
-      }
-    );
 
-    if (!result.success) {
-      console.error(`❌ Failed to ${willBeChecked ? 'check' : 'uncheck'} supplier items`);
-      // Revert local state on failure
-      setCheckedItems(checkedItems);
+        const results = await Promise.all(updatePromises);
+        allSuccessful = results.every(success => success);
+
+        if (allSuccessful) {
+          console.log(`✅ ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in database`);
+          
+          // Broadcast update to other clients
+          if (broadcastUpdate) {
+            broadcastUpdate({
+              itemIndex: null, // Multiple items
+              timestamp: Date.now(),
+              updateType: 'supplier_check',
+              checked: willBeChecked
+            });
+            console.log(`📡 Broadcasted supplier ${willBeChecked ? 'check' : 'uncheck'} to other clients`);
+          }
+        } else {
+          console.error(`❌ Failed to ${willBeChecked ? 'check' : 'uncheck'} some supplier items`);
+          // Revert local state on failure
+          setCheckedItems(checkedItems);
+        }
+      } catch (error) {
+        console.error(`Error ${willBeChecked ? 'checking' : 'unchecking'} supplier items:`, error);
+        // Revert local state on failure
+        setCheckedItems(checkedItems);
+      }
     } else {
-      console.log(`✅ ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} items from supplier`);
+      // For non-shared lists, localStorage is already updated by useEffect
+      console.log(`💾 ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in localStorage`);
     }
   };
 
@@ -431,6 +592,98 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       }
       return newSet;
     });
+  };
+
+  const handleQuantitySelection = async () => {
+    if (!quantityModalData) return;
+    
+    const { index, currentQuantity, isAdditional } = quantityModalData;
+    const item = currentPicklist[index];
+    const originalQuantity = parseInt(item.quantity) || 1;
+    
+    // Calculate new total purchased quantity
+    const newTotalPurchased = isAdditional ? currentQuantity + selectedQuantity : selectedQuantity;
+    
+    
+    // Store the partial quantity
+    setPartialQuantities(prev => {
+      const newMap = new Map(prev);
+      if (newTotalPurchased >= originalQuantity) {
+        // If all items purchased, remove from partial quantities
+        newMap.delete(index);
+      } else {
+        newMap.set(index, newTotalPurchased);
+      }
+      return newMap;
+    });
+    
+    // Only mark item as checked if full quantity was selected
+    const newCheckedItems = new Set(checkedItems);
+    if (newTotalPurchased >= originalQuantity) {
+      newCheckedItems.add(index);
+    } else {
+      newCheckedItems.delete(index); // Keep unchecked for partial quantities
+    }
+    setCheckedItems(newCheckedItems);
+    
+    // Sync to database for shared lists
+    if (shareId) {
+      try {
+        console.log(`🔍 Sending to database: purchasedQuantity=${newTotalPurchased} for item ${index}`);
+        
+        const response = await fetch(`/api/shopping-list/share/${shareId}/item/${index}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ purchasedQuantity: newTotalPurchased })
+        });
+
+        if (response.ok) {
+          console.log(`✅ Synced item ${index} check state to database with partial quantity ${selectedQuantity}/${quantityModalData?.maxQuantity}`);
+          
+          // Broadcast update to other clients
+          if (broadcastUpdate) {
+            broadcastUpdate({
+              itemIndex: index,
+              checked: true,
+              partialQuantity: selectedQuantity,
+              timestamp: Date.now(),
+              updateType: 'item_check'
+            });
+          }
+        } else {
+          console.error('❌ Failed to sync item check state to database');
+          // Revert local state on failure
+          newCheckedItems.delete(index);
+          setCheckedItems(newCheckedItems);
+          setPartialQuantities(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(index);
+            return newMap;
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error syncing item check state:', error);
+        // Revert local state on error
+        newCheckedItems.delete(index);
+        setCheckedItems(newCheckedItems);
+        setPartialQuantities(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(index);
+          return newMap;
+        });
+      }
+    } else {
+      // For main lists, store in localStorage
+      const storageKey = `checkedItems_main`;
+      localStorage.setItem(storageKey, JSON.stringify([...newCheckedItems]));
+    }
+    
+    // Close modal
+    setShowQuantityModal(false);
+    setQuantityModalData(null);
+    setSelectedQuantity(1);
   };
 
   const handleSupplierNotAvailable = async (item, index) => {
@@ -885,16 +1138,17 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               {!isCollapsed && (
                 <div className="divide-y divide-gray-100">
                   {items
-                    .filter(item => showCompleted || !checkedItems.has(item.index))
+                    .filter(item => showCompleted || !checkedItems.has(item.index) || item.isRemainingPortion)
                     .map((item) => {
-                      const isChecked = checkedItems.has(item.index);
+                      const isChecked = item.isPurchasedPortion || 
+                        (item.isRemainingPortion ? false : (isFullyPurchased(item, item.index) || checkedItems.has(item.index)));
                       return (
                         <div
                           key={item.index}
                           className={`px-4 py-3 transition-all duration-200 ${
                             isChecked ? 'bg-gray-50 opacity-75' : 'bg-white hover:bg-gray-50'
                           }`}
-                          onClick={() => handleItemCheck(item.index)}
+                          onClick={() => handleItemCheck(item.isRemainingPortion ? item.originalIndex : item.index)}
                         >
                           <div className="flex items-start space-x-3">
                             {/* Checkbox */}
@@ -917,13 +1171,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                   }`}>
                                     {item.originalItem || item.item}
                                   </h4>
-                                  {item.matchedDescription && item.matchedDescription !== item.originalItem && (
-                                    <p className={`text-xs mt-1 ${
-                                      isChecked ? 'text-gray-400' : 'text-gray-600'
-                                    }`}>
-                                      Matched: {item.matchedDescription}
-                                    </p>
-                                  )}
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                   <div className={`text-sm font-medium ${
@@ -1123,6 +1370,128 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
 
               <div className="mt-4 text-xs text-gray-500 text-center">
                 Changes will be synced to all users in shared lists
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quantity Selection Modal */}
+      {showQuantityModal && quantityModalData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Select Quantity</h3>
+                <button
+                  onClick={() => {
+                    setShowQuantityModal(false);
+                    setQuantityModalData(null);
+                    setSelectedQuantity(1);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Item:</strong> {quantityModalData.item.originalItem}
+                </p>
+                <p className="text-sm text-gray-600 mb-4">
+                  {quantityModalData.isAdditional 
+                    ? `How many additional items did you get? (Already have ${quantityModalData.currentQuantity})`
+                    : `How many of the ${quantityModalData.maxQuantity} items did you actually get?`
+                  }
+                </p>
+              </div>
+
+              {/* Quantity Input Section */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <label className="text-sm font-medium text-gray-700">Quantity:</label>
+                  <span className="text-sm text-gray-500">Max: {quantityModalData.maxQuantity}</span>
+                </div>
+                
+                {/* Number Input with Controls */}
+                <div className="flex items-center gap-3 mb-4">
+                  <button
+                    onClick={() => setSelectedQuantity(Math.max(1, selectedQuantity - 1))}
+                    className="p-2 border rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    disabled={selectedQuantity <= 1}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                  </button>
+                  
+                  <input
+                    type="number"
+                    min="1"
+                    max={quantityModalData.maxQuantity}
+                    value={selectedQuantity}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 1;
+                      setSelectedQuantity(Math.min(quantityModalData.maxQuantity, Math.max(1, value)));
+                    }}
+                    className="w-20 px-3 py-2 text-center border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  
+                  <button
+                    onClick={() => setSelectedQuantity(Math.min(quantityModalData.maxQuantity, selectedQuantity + 1))}
+                    className="p-2 border rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    disabled={selectedQuantity >= quantityModalData.maxQuantity}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Quick Select Options */}
+                {quantityModalData.maxQuantity > 5 && (
+                  <div className="grid grid-cols-4 gap-2 mb-4">
+                    {[1, Math.ceil(quantityModalData.maxQuantity * 0.25), Math.ceil(quantityModalData.maxQuantity * 0.5), quantityModalData.maxQuantity].filter((qty, index, arr) => arr.indexOf(qty) === index).map((qty) => (
+                      <button
+                        key={qty}
+                        onClick={() => setSelectedQuantity(qty)}
+                        className={`px-3 py-2 text-sm border rounded-lg transition-colors ${
+                          selectedQuantity === qty 
+                            ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                            : 'hover:bg-gray-50 hover:border-gray-300'
+                        }`}
+                      >
+                        {qty === 1 ? '1' : qty === quantityModalData.no ? 'All' : qty}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Confirmation Button */}
+                <button
+                  onClick={handleQuantitySelection}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors mb-3"
+                >
+                  Select {selectedQuantity} item{selectedQuantity > 1 ? 's' : ''}
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowQuantityModal(false);
+                  setQuantityModalData(null);
+                  setSelectedQuantity(1);
+                }}
+                className="w-full bg-gray-200 text-gray-800 py-3 px-4 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                Your selection will be synced to all users in shared lists
               </div>
             </div>
           </div>
