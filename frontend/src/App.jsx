@@ -28,6 +28,25 @@ function AppContent() {
   const [error, setError] = useState(null)
   const [editedPicklist, setEditedPicklist] = useState(null)
 
+  // Load saved picklist from database on app start
+  useEffect(() => {
+    const loadSavedPicklist = async () => {
+      try {
+        const response = await fetch('/api/session/picklist');
+        const result = await response.json();
+        
+        if (result.success && result.picklist) {
+          setEditedPicklist(result.picklist);
+          console.log(`Loaded saved picklist with ${result.itemCount} items from database`);
+        }
+      } catch (error) {
+        console.warn('Failed to load saved picklist from database:', error);
+      }
+    };
+    
+    loadSavedPicklist();
+  }, []);
+
   const handleFileUpload = async (file) => {
     navigate('/processing')
     setError(null)
@@ -49,6 +68,8 @@ function AppContent() {
         console.log('Picklist items:', result.picklist)
         setResults(result)
         setEditedPicklist(null)
+        // Clear database session when new file is uploaded
+        fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
         navigate('/')
       } else {
         setError(result.error || 'Failed to process file')
@@ -100,6 +121,8 @@ function AppContent() {
         console.log('Combined picklist items:', result.combinedPicklist)
         setResults(transformedResult)
         setEditedPicklist(null)
+        // Clear database session when new file is uploaded
+        fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
         navigate('/')
       } else {
         setError(result.error || 'Failed to process CSV files')
@@ -116,6 +139,8 @@ function AppContent() {
     setResults(null)
     setEditedPicklist(null)
     setError(null)
+    // Clear database session when resetting
+    fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
     navigate('/')
   }
 
@@ -125,6 +150,32 @@ function AppContent() {
 
   const handlePicklistUpdate = (updatedPicklist) => {
     setEditedPicklist(updatedPicklist)
+    
+    // Also save to database
+    const saveToDatabase = async () => {
+      try {
+        const response = await fetch('/api/session/picklist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            picklist: updatedPicklist
+          })
+        });
+        
+        if (response.ok) {
+          console.log('Saved picklist changes to database');
+        } else {
+          console.error('Failed to save picklist changes to database');
+        }
+      } catch (error) {
+        console.warn('Failed to save picklist to database:', error);
+      }
+    };
+    
+    // Save asynchronously
+    saveToDatabase();
   }
 
   // Shared Shopping List Component
@@ -198,20 +249,18 @@ function AppContent() {
     </div>
   )
 
-  // Shopping List Page Component - automatically creates shared list
+  // Shopping List Page Component - creates/redirects to shared shopping list
   const ShoppingListPage = () => {
-    const [isCreatingShare, setIsCreatingShare] = useState(false)
+    const currentPicklist = editedPicklist || (results && results.picklist)
     
-    useEffect(() => {
-      // Auto-create shared list when accessing shopping list
+    React.useEffect(() => {
+      if (!currentPicklist || currentPicklist.length === 0) {
+        navigate('/')
+        return
+      }
+
+      // Create a shared shopping list and redirect to it
       const createSharedList = async () => {
-        const currentPicklist = editedPicklist || (results && results.picklist)
-        if (!currentPicklist || currentPicklist.length === 0) {
-          navigate('/')
-          return
-        }
-        
-        setIsCreatingShare(true)
         try {
           const response = await fetch('/api/shopping-list/share', {
             method: 'POST',
@@ -223,44 +272,39 @@ function AppContent() {
               title: 'Shopping List'
             })
           })
-          
+
           const result = await response.json()
+          
           if (result.success) {
-            // Redirect to shared shopping list
-            navigate(`/shopping/${result.shareId}`, { replace: true })
+            navigate(`/shopping/${result.shareId}`)
           } else {
-            console.error('Failed to create shared list:', result.error)
-            setIsCreatingShare(false)
+            console.error('Failed to create shared shopping list:', result.error)
           }
         } catch (error) {
-          console.error('Error creating shared list:', error)
-          setIsCreatingShare(false)
+          console.error('Error creating shared shopping list:', error)
         }
       }
-      
+
       createSharedList()
-    }, [editedPicklist, results, navigate])
+    }, [currentPicklist, navigate])
     
-    if (isCreatingShare) {
-      return (
-        <div className="min-h-screen gradient-bg">
-          <Header />
-          <main className="flex-1">
-            <div className="max-w-2xl mx-auto p-8">
-              <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-                <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
-                  <span className="spinner"></span>
-                  Creating shopping list...
-                </div>
+    // Show loading while redirecting
+    return (
+      <div className="min-h-screen gradient-bg">
+        <Header />
+        <main className="flex-1">
+          <div className="max-w-2xl mx-auto p-8">
+            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+              <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
+                <span className="spinner"></span>
+                Creating shopping list...
               </div>
             </div>
-          </main>
-          <Footer />
-        </div>
-      )
-    }
-    
-    return null
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
   }
 
   // Database Manager Page Component

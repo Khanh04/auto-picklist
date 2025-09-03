@@ -24,12 +24,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     }
 
     if (results && results.picklist) {
-      return results.picklist.map(item => ({
-        ...item,
-        originalItem: item.originalItem || item.item,
-        matchedItemId: item.matchedItemId,
-        manualOverride: item.manualOverride || false
-      }))
+      // Just return the picklist directly without any transformation
+      return results.picklist
     }
 
     return []
@@ -55,10 +51,10 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     if (currentPicklist.length > 0 && !initialDataFetched) {
       // Extract unique suppliers for dropdown
       const suppliers = [...new Set(currentPicklist
-        .filter(item => item.selectedSupplier !== 'No supplier found')
+        .filter(item => item.selectedSupplier !== 'back order')
         .map(item => item.selectedSupplier)
       )].sort()
-      setAvailableSuppliers(['No supplier found', ...suppliers])
+      setAvailableSuppliers([...suppliers, 'back order'])
       
       // Fetch database data
       fetchDatabaseData()
@@ -86,7 +82,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       if (suppliersResponse.ok) {
         const suppliersData = await suppliersResponse.json()
         const supplierNames = suppliersData.suppliers.map(s => s.name)
-        setAvailableSuppliers(prev => [...new Set([...prev, ...supplierNames])].sort())
+        const allSuppliers = [...new Set([...availableSuppliers.filter(s => s !== 'back order'), ...supplierNames])].sort()
+        setAvailableSuppliers([...allSuppliers, 'back order'])
       }
 
       // Fetch available items for matching
@@ -94,6 +91,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json()
         const items = itemsData.items || []
+        console.log('PicklistPreview: Fetched items', items.length)
         setAvailableItems(items)
         
         // Prepare options for matched item selection (only product descriptions)
@@ -102,6 +100,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
           label: item.description, // Only show description, no supplier/price
           item: item // Store full item data for easy access
         }))
+        console.log('PicklistPreview: Select options prepared', options.length)
         setSelectOptions(options)
         
         // Create Fuse instance for fuzzy matching (only product descriptions)
@@ -148,7 +147,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       // Cleared selection
       newPicklist[index].matchedItemId = null
       newPicklist[index].manualOverride = false
-      newPicklist[index].selectedSupplier = 'No supplier found'
+      newPicklist[index].selectedSupplier = 'back order'
       newPicklist[index].unitPrice = ''
       newPicklist[index].totalPrice = 'N/A'
     } else {
@@ -189,7 +188,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
         // Cleared selection
         newPicklist[index].matchedItemId = null
         newPicklist[index].manualOverride = false
-        newPicklist[index].selectedSupplier = 'No supplier found'
+        newPicklist[index].selectedSupplier = 'back order'
         newPicklist[index].unitPrice = ''
         newPicklist[index].totalPrice = 'N/A'
       } else {
@@ -206,8 +205,8 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
     } else if (field === 'selectedSupplier') {
       newPicklist[index].selectedSupplier = value
       
-      // Handle "No supplier found" case
-      if (value === 'No supplier found') {
+      // Handle "back order" case
+      if (value === 'back order') {
         newPicklist[index].unitPrice = ''
         newPicklist[index].totalPrice = 'N/A'
       } else if (newPicklist[index].matchedItemId && productSuppliers[newPicklist[index].matchedItemId]) {
@@ -250,7 +249,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
 
   const calculateSummary = () => {
     const itemsWithSuppliers = currentPicklist.filter(item => 
-      item.selectedSupplier !== 'No supplier found'
+      item.selectedSupplier !== 'back order'
     ).length
     
     const totalCost = currentPicklist.reduce((sum, item) => {
@@ -450,7 +449,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
             {productSpecificSuppliers ? (
               // Show suppliers for the specific matched product with prices
               <>
-                <option value="No supplier found">No supplier found</option>
+                <option value="back order">back order</option>
                 {productSpecificSuppliers.map(supplier => (
                   <option key={supplier.supplier_price_id} value={supplier.supplier_name}>
                     {supplier.supplier_name} — ${parseFloat(supplier.price).toFixed(2)}

@@ -242,6 +242,77 @@ router.put('/share/:shareId/item/:itemIndex',
 );
 
 /**
+ * PUT /api/shopping-list/share/:shareId/picklist
+ * Update the entire picklist for a shared shopping list
+ */
+router.put('/share/:shareId/picklist',
+    validateBody({
+        picklist: { 
+            required: true, 
+            type: 'array',
+            custom: (value) => {
+                if (!Array.isArray(value) || value.length === 0) {
+                    return 'must be a non-empty array';
+                }
+                return null;
+            }
+        }
+    }),
+    asyncHandler(async (req, res) => {
+        const { shareId } = req.params;
+        const { picklist } = req.body;
+        
+        try {
+            // First get the shopping list ID
+            const listResult = await pool.query(`
+                SELECT id FROM shopping_lists 
+                WHERE share_id = $1 AND expires_at > CURRENT_TIMESTAMP
+            `, [shareId]);
+
+            if (listResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Shopping list not found or expired'
+                });
+            }
+
+            const shoppingListId = listResult.rows[0].id;
+
+            // Clean and update picklist data
+            const cleanPicklist = picklist.map(item => ({
+                originalItem: item.originalItem || item.item,
+                matchedDescription: item.matchedDescription,
+                matchedItemId: item.matchedItemId,
+                quantity: item.quantity,
+                selectedSupplier: item.selectedSupplier,
+                unitPrice: item.unitPrice,
+                totalPrice: item.totalPrice
+            }));
+
+            // Update the picklist data in the database
+            await pool.query(`
+                UPDATE shopping_lists 
+                SET picklist_data = $1
+                WHERE id = $2
+            `, [JSON.stringify(cleanPicklist), shoppingListId]);
+
+            res.json({
+                success: true,
+                message: 'Picklist updated successfully',
+                itemCount: cleanPicklist.length
+            });
+
+        } catch (error) {
+            console.error('Error updating shared shopping list picklist:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to update picklist'
+            });
+        }
+    })
+);
+
+/**
  * GET /api/shopping-list/stats
  * Get sharing statistics (optional, for admin purposes)
  */

@@ -15,7 +15,7 @@ function createPicklist(orderItems, priceData) {
         const picklistItem = {
             quantity: orderItem.quantity,
             item: orderItem.item,
-            selectedSupplier: supplier || 'No supplier found',
+            selectedSupplier: supplier || 'back order',
             unitPrice: price || 'No price found',
             totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A'
         };

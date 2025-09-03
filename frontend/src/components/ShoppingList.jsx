@@ -20,8 +20,95 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const [error, setError] = useState(null);
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
 
+  // Unified data sync manager - handles all update scenarios
+  const syncPicklistData = async (updateFunction, options = {}) => {
+    const { 
+      broadcastToOthers = false, 
+      itemIndex = null,
+      suppressWebSocket = false 
+    } = options;
+
+    return new Promise((resolve) => {
+      setCurrentPicklist(prevPicklist => {
+        const newPicklist = updateFunction(prevPicklist);
+        
+        // Async persistence and sync logic
+        const performSync = async () => {
+          try {
+            // 1. Save to appropriate storage
+            const saveSuccess = await persistPicklistData(newPicklist);
+            
+            // 2. Broadcast to other clients if needed and save was successful
+            if (saveSuccess && broadcastToOthers && shareId && broadcastUpdate && !suppressWebSocket) {
+              broadcastUpdate({
+                itemIndex: itemIndex,
+                timestamp: Date.now(),
+                updateType: 'supplier_change'
+              });
+              console.log(`📡 Broadcasted update for item ${itemIndex} to other clients`);
+            }
+
+            // 3. Handle parent callback (refresh main page for non-shared lists)
+            if (saveSuccess && onPicklistUpdate) {
+              console.log(`🔄 Refreshing main page with updated data`);
+              onPicklistUpdate(newPicklist);
+            }
+            
+            resolve({ success: saveSuccess, data: newPicklist });
+          } catch (error) {
+            console.error('Sync operation failed:', error);
+            resolve({ success: false, error });
+          }
+        };
+        
+        performSync();
+        return newPicklist;
+      });
+    });
+  };
+
+  // Persistence layer - handles saving to appropriate storage
+  const persistPicklistData = async (picklistData) => {
+    try {
+      if (shareId) {
+        // Shared lists: save to shared database
+        const response = await fetch(`/api/shopping-list/share/${shareId}/picklist`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ picklist: picklistData })
+        });
+        
+        if (response.ok) {
+          console.log('✅ Saved shared shopping list to database');
+          return true;
+        } else {
+          console.error('❌ Failed to save shared shopping list to database');
+          return false;
+        }
+      } else {
+        // Non-shared lists: save to session storage
+        const response = await fetch('/api/session/picklist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ picklist: picklistData })
+        });
+        
+        if (response.ok) {
+          console.log('✅ Saved shopping list to session storage');
+          return true;
+        } else {
+          console.error('❌ Failed to save shopping list to session storage');
+          return false;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Persistence error:', error);
+      return false;
+    }
+  };
+
   // Initialize WebSocket connection for shared lists
-  const { isConnected, connectionError, subscribe, toggleCompleted, switchSupplier } = useWebSocket(shareId);
+  const { isConnected, connectionError, subscribe, broadcastUpdate } = useWebSocket(shareId);
 
   // Initialize picklist data - for shared lists, fetch from API; for main lists, use props
   useEffect(() => {
@@ -68,37 +155,34 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   useEffect(() => {
     if (!shareId) return;
 
-    // Handle real-time item toggle updates from other users
-    const unsubscribeToggle = subscribe('item_toggled', (data) => {
-      const { index, checked } = data;
-      console.log('Received real-time update:', data);
-      setCheckedItems(prevItems => {
-        const newItems = new Set(prevItems);
-        if (checked) {
-          newItems.add(index);
-        } else {
-          newItems.delete(index);
-        }
-        return newItems;
-      });
-    });
+    // Handle real-time item toggle updates from other users (legacy handler)
+    // NOTE: This is now handled by the unified 'picklist_updated' handler below
 
-    // Handle real-time supplier switch updates from other users
-    const unsubscribeSupplier = subscribe('supplier_switched', (data) => {
-      const { index, supplier, unitPrice, totalPrice } = data;
-      console.log('Received supplier switch update:', data);
-      setCurrentPicklist(prevPicklist => {
-        const newPicklist = [...prevPicklist];
-        if (newPicklist[index]) {
-          newPicklist[index] = {
-            ...newPicklist[index],
-            selectedSupplier: supplier,
-            unitPrice: unitPrice,
-            totalPrice: totalPrice
-          };
+    // Handle picklist update signals from other users
+    const unsubscribeUpdate = subscribe('picklist_updated', async (data) => {
+      console.log('Received picklist update signal:', data);
+      
+      // Fetch fresh data from database
+      try {
+        const response = await fetch(`/api/shopping-list/share/${shareId}`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.picklist) {
+          console.log('Refreshed picklist data from database');
+          setCurrentPicklist(result.data.picklist);
+          
+          // Update checked items state based on fresh data
+          const checkedIndices = new Set();
+          result.data.picklist.forEach((item, index) => {
+            if (item.isChecked) {
+              checkedIndices.add(index);
+            }
+          });
+          setCheckedItems(checkedIndices);
         }
-        return newPicklist;
-      });
+      } catch (error) {
+        console.error('Error refreshing picklist data:', error);
+      }
     });
 
     // Handle errors from WebSocket
@@ -108,8 +192,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     });
 
     return () => {
-      unsubscribeToggle();
-      unsubscribeSupplier();
+      unsubscribeUpdate();
       unsubscribeError();
     };
   }, [shareId, subscribe]);
@@ -168,7 +251,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     let checked = 0;
 
     currentPicklist.forEach((item, index) => {
-      const supplier = item.selectedSupplier || 'No supplier found';
+      const supplier = item.selectedSupplier || 'back order';
       if (!grouped[supplier]) {
         grouped[supplier] = [];
       }
@@ -184,7 +267,19 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       }
     });
 
-    setGroupedItems(grouped);
+    // Sort suppliers with "back order" at the bottom
+    const sortedGrouped = {};
+    const entries = Object.entries(grouped).sort(([a], [b]) => {
+      if (a === 'back order') return 1;
+      if (b === 'back order') return -1;
+      return a.localeCompare(b);
+    });
+    
+    entries.forEach(([supplier, items]) => {
+      sortedGrouped[supplier] = items;
+    });
+    
+    setGroupedItems(sortedGrouped);
     setTotalCost(total);
     setCheckedCost(checked);
   }, [currentPicklist, checkedItems]);
@@ -197,69 +292,127 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     }
   }, [checkedItems, shareId]);
 
-  const handleItemCheck = (index) => {
-    const newCheckedItems = new Set(checkedItems);
-    const willBeChecked = !newCheckedItems.has(index);
+  const handleItemCheck = async (index) => {
+    const willBeChecked = !checkedItems.has(index);
     
+    // Update local checkedItems state immediately for UI responsiveness
+    const newCheckedItems = new Set(checkedItems);
     if (willBeChecked) {
       newCheckedItems.add(index);
     } else {
       newCheckedItems.delete(index);
     }
-    
     setCheckedItems(newCheckedItems);
 
-    // Send real-time update for shared lists
-    if (shareId && toggleCompleted) {
-      toggleCompleted({
-        index: index,
-        checked: willBeChecked,
-        timestamp: Date.now()
-      });
-    }
-  };
-
-  const handleClearAll = () => {
-    if (confirm('Clear all checked items?')) {
-      // For shared lists, send WebSocket updates for each checked item
-      if (shareId && toggleCompleted && checkedItems.size > 0) {
-        checkedItems.forEach(index => {
-          toggleCompleted({
-            index: index,
-            checked: false,
-            timestamp: Date.now()
-          });
-        });
+    // Use unified sync system to update the picklist data
+    const result = await syncPicklistData(
+      prevPicklist => {
+        const newPicklist = [...prevPicklist];
+        if (newPicklist[index]) {
+          newPicklist[index] = {
+            ...newPicklist[index],
+            isChecked: willBeChecked
+          };
+        }
+        return newPicklist;
+      },
+      {
+        broadcastToOthers: true,
+        itemIndex: index,
+        suppressWebSocket: false
       }
-      
-      setCheckedItems(new Set());
+    );
+
+    if (!result.success) {
+      console.error(`❌ Failed to sync item ${index} check state`);
+      // Revert local state on failure
+      setCheckedItems(checkedItems);
+    } else {
+      console.log(`✅ Synced item ${index} check state: ${willBeChecked ? 'checked' : 'unchecked'}`);
     }
   };
 
-  const handleCheckAllSupplier = (supplierItems) => {
+  const handleClearAll = async () => {
+    if (confirm('Clear all checked items?')) {
+      const previousCheckedItems = new Set(checkedItems);
+      
+      // Clear local state immediately
+      setCheckedItems(new Set());
+
+      // Use unified sync system to clear all checked items
+      const result = await syncPicklistData(
+        prevPicklist => {
+          const newPicklist = [...prevPicklist];
+          previousCheckedItems.forEach(index => {
+            if (newPicklist[index]) {
+              newPicklist[index] = {
+                ...newPicklist[index],
+                isChecked: false
+              };
+            }
+          });
+          return newPicklist;
+        },
+        {
+          broadcastToOthers: true,
+          itemIndex: null, // Multiple items
+          suppressWebSocket: false
+        }
+      );
+
+      if (!result.success) {
+        console.error(`❌ Failed to clear all checked items`);
+        // Revert local state on failure
+        setCheckedItems(previousCheckedItems);
+      } else {
+        console.log(`✅ Cleared all ${previousCheckedItems.size} checked items`);
+      }
+    }
+  };
+
+  const handleCheckAllSupplier = async (supplierItems) => {
     const newCheckedItems = new Set(checkedItems);
     const allChecked = supplierItems.every(item => newCheckedItems.has(item.index));
+    const willBeChecked = !allChecked;
     
+    // Update local state immediately
     supplierItems.forEach(item => {
-      const willBeChecked = !allChecked;
-      
-      if (allChecked) {
-        newCheckedItems.delete(item.index);
-      } else {
+      if (willBeChecked) {
         newCheckedItems.add(item.index);
-      }
-
-      // Send real-time update for each item in shared lists
-      if (shareId && toggleCompleted) {
-        toggleCompleted({
-          index: item.index,
-          checked: willBeChecked,
-          timestamp: Date.now()
-        });
+      } else {
+        newCheckedItems.delete(item.index);
       }
     });
-    
     setCheckedItems(newCheckedItems);
+
+    // Use unified sync system to update all items
+    const result = await syncPicklistData(
+      prevPicklist => {
+        const newPicklist = [...prevPicklist];
+        supplierItems.forEach(item => {
+          if (newPicklist[item.index]) {
+            newPicklist[item.index] = {
+              ...newPicklist[item.index],
+              isChecked: willBeChecked
+            };
+          }
+        });
+        return newPicklist;
+      },
+      {
+        broadcastToOthers: true,
+        itemIndex: null, // Multiple items
+        suppressWebSocket: false
+      }
+    );
+
+    if (!result.success) {
+      console.error(`❌ Failed to ${willBeChecked ? 'check' : 'uncheck'} supplier items`);
+      // Revert local state on failure
+      setCheckedItems(checkedItems);
+    } else {
+      console.log(`✅ ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} items from supplier`);
+    }
   };
 
   const getItemsCount = () => {
@@ -281,79 +434,40 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   };
 
   const handleSupplierNotAvailable = async (item, index) => {
-    if (!item.matchedItemId || switchingSupplier.has(index)) return;
+    if (switchingSupplier.has(index)) return;
 
     setSwitchingSupplier(prev => new Set(prev).add(index));
 
-    try {
-      const response = await fetch(`/api/items/${item.matchedItemId}/switch-supplier`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          currentSupplier: item.selectedSupplier,
-          currentPrice: typeof item.unitPrice === 'number' ? item.unitPrice : parseFloat(item.unitPrice) || 0
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const newTotalPrice = (result.supplier.price * item.quantity).toFixed(2);
-        
-        // Update local state
-        setCurrentPicklist(prevPicklist => {
-          const newPicklist = [...prevPicklist];
-          newPicklist[index] = {
-            ...newPicklist[index],
-            selectedSupplier: result.supplier.name,
-            unitPrice: result.supplier.price,
-            totalPrice: newTotalPrice
-          };
-          
-          // Update parent component state if callback provided (main shopping list)
-          if (onPicklistUpdate && !shareId) {
-            onPicklistUpdate(newPicklist);
-          }
-          
-          return newPicklist;
-        });
-
-        // Send real-time update for shared lists
-        if (shareId && switchSupplier) {
-          switchSupplier({
-            index: index,
-            supplier: result.supplier.name,
-            unitPrice: result.supplier.price,
-            totalPrice: newTotalPrice,
-            timestamp: Date.now()
-          });
-        }
-
-        console.log(`Switched supplier for "${item.originalItem}" from ${result.previousSupplier.name} ($${result.previousSupplier.price}) to ${result.supplier.name} ($${result.supplier.price})`);
-      } else if (result.requiresManualSelection) {
-        // Show manual supplier selection modal
-        setSupplierModalData({
-          item,
-          index,
-          availableSuppliers: result.availableSuppliers,
-          currentSupplier: result.currentSupplier
-        });
-        setShowSupplierModal(true);
-      } else {
-        alert(result.error || 'Unable to switch supplier');
+    // Use unified sync manager
+    const result = await syncPicklistData(
+      prevPicklist => {
+        const newPicklist = [...prevPicklist];
+        newPicklist[index] = {
+          ...newPicklist[index],
+          selectedSupplier: 'back order',
+          unitPrice: '',
+          totalPrice: 'N/A'
+        };
+        return newPicklist;
+      },
+      { 
+        broadcastToOthers: true, 
+        itemIndex: index 
       }
-    } catch (error) {
-      console.error('Error switching supplier:', error);
-      alert('Network error while switching supplier');
-    } finally {
-      setSwitchingSupplier(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(index);
-        return newSet;
-      });
+    );
+
+    if (result.success) {
+      console.log(`✅ Moved "${item.originalItem}" to back order`);
+    } else {
+      console.error(`❌ Failed to move "${item.originalItem}" to back order`);
     }
+    
+    // Remove from switching state
+    setSwitchingSupplier(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(index);
+      return newSet;
+    });
   };
 
   const handleManualSupplierSelection = async (selectedSupplier, selectedPrice) => {
@@ -379,36 +493,29 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       if (result.success) {
         const newTotalPrice = (result.supplier.price * item.quantity).toFixed(2);
         
-        // Update local state
-        setCurrentPicklist(prevPicklist => {
-          const newPicklist = [...prevPicklist];
-          newPicklist[index] = {
-            ...newPicklist[index],
-            selectedSupplier: result.supplier.name,
-            unitPrice: result.supplier.price,
-            totalPrice: newTotalPrice
-          };
-          
-          // Update parent component state if callback provided (main shopping list)
-          if (onPicklistUpdate && !shareId) {
-            onPicklistUpdate(newPicklist);
+        // Use unified sync manager
+        const syncResult = await syncPicklistData(
+          prevPicklist => {
+            const newPicklist = [...prevPicklist];
+            newPicklist[index] = {
+              ...newPicklist[index],
+              selectedSupplier: result.supplier.name,
+              unitPrice: result.supplier.price,
+              totalPrice: newTotalPrice
+            };
+            return newPicklist;
+          },
+          { 
+            broadcastToOthers: true, 
+            itemIndex: index 
           }
-          
-          return newPicklist;
-        });
+        );
 
-        // Send real-time update for shared lists
-        if (shareId && switchSupplier) {
-          switchSupplier({
-            index: index,
-            supplier: result.supplier.name,
-            unitPrice: result.supplier.price,
-            totalPrice: newTotalPrice,
-            timestamp: Date.now()
-          });
+        if (syncResult.success) {
+          console.log(`✅ Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
+        } else {
+          console.error(`❌ Failed to update supplier for "${item.originalItem}"`);
         }
-
-        console.log(`Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
         
         // Close modal
         setShowSupplierModal(false);
@@ -428,38 +535,33 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     }
   };
 
-  const handleNoSupplier = () => {
+  const handleNoSupplier = async () => {
     if (!supplierModalData) return;
 
     const { index } = supplierModalData;
     
-    // Update to "No supplier found"
-    setCurrentPicklist(prevPicklist => {
-      const newPicklist = [...prevPicklist];
-      newPicklist[index] = {
-        ...newPicklist[index],
-        selectedSupplier: 'No supplier found',
-        unitPrice: 'No price found',
-        totalPrice: 'N/A'
-      };
-      
-      // Update parent component state if callback provided (main shopping list)
-      if (onPicklistUpdate) {
-        onPicklistUpdate(newPicklist);
+    // Use unified sync manager
+    const result = await syncPicklistData(
+      prevPicklist => {
+        const newPicklist = [...prevPicklist];
+        newPicklist[index] = {
+          ...newPicklist[index],
+          selectedSupplier: 'back order',
+          unitPrice: 'No price found',
+          totalPrice: 'N/A'
+        };
+        return newPicklist;
+      },
+      { 
+        broadcastToOthers: true, 
+        itemIndex: index 
       }
-      
-      return newPicklist;
-    });
+    );
 
-    // Send real-time update for shared lists
-    if (shareId && switchSupplier) {
-      switchSupplier({
-        index: index,
-        supplier: 'No supplier found',
-        unitPrice: 'No price found',
-        totalPrice: 'N/A',
-        timestamp: Date.now()
-      });
+    if (result.success) {
+      console.log(`✅ Marked item ${index} as "No supplier found"`);
+    } else {
+      console.error(`❌ Failed to mark item ${index} as no supplier`);
     }
 
     // Close modal
@@ -470,9 +572,9 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      // First, ensure the parent component has the latest state (for main shopping list)
-      if (onPicklistUpdate && !shareId) {
-        onPicklistUpdate(currentPicklist);
+      // First, ensure we have the latest state saved (for non-shared lists)
+      if (!shareId) {
+        await syncPicklistData(prevPicklist => prevPicklist, { suppressWebSocket: true });
       }
 
       const response = await fetch('/api/shopping-list/share', {
@@ -510,13 +612,28 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       setShowShareOptions(false);
     } catch (error) {
       // Fallback for browsers that don't support clipboard API
-      const textArea = document.createElement('textarea');
-      textArea.value = shareUrl;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      alert('Link copied to clipboard!');
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+          alert('Link copied to clipboard!');
+        } else {
+          // If copy failed, show the URL for manual copying
+          alert(`Please copy this link manually:\n\n${shareUrl}`);
+        }
+      } catch (fallbackError) {
+        // Final fallback - show URL for manual copying
+        alert(`Please copy this link manually:\n\n${shareUrl}`);
+      }
       setShowShareOptions(false);
     }
   };
@@ -843,9 +960,9 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                           : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300'
                                       }`}
-                                      title="Switch to next lowest price supplier if this item is not available"
+                                      title="Move this item to back order"
                                     >
-                                      {switchingSupplier.has(item.index) ? '⏳ Switching...' : '❌ Not Available'}
+                                      {switchingSupplier.has(item.index) ? '⏳ Moving...' : '📦 Back Order'}
                                     </button>
                                   )}
                                   {isChecked && (
@@ -953,7 +1070,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                   <strong>Item:</strong> {supplierModalData.item.originalItem}
                 </p>
                 <p className="text-sm text-orange-600 mb-4">
-                  No higher-priced suppliers available. Please select an alternative or mark as "No supplier found".
+                  No higher-priced suppliers available. Please select an alternative or mark as "back order".
                 </p>
               </div>
 

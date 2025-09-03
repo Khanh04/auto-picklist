@@ -140,7 +140,7 @@ class AutoPicklistApp {
                 quantity: orderItem.quantity,
                 item: orderItem.item,
                 originalItem: orderItem.item, // Keep original for frontend
-                selectedSupplier: supplier || 'No supplier found',
+                selectedSupplier: supplier || 'back order',
                 unitPrice: price || 'No price found',
                 totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A',
                 matchedItemId: productId, // Include the matched product ID from backend

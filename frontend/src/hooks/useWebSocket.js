@@ -106,6 +106,13 @@ const useWebSocket = (shareId) => {
     })
   }, [sendMessage])
 
+  const broadcastUpdate = useCallback((updateData) => {
+    sendMessage({
+      type: 'picklist_update_broadcast',
+      data: updateData
+    })
+  }, [sendMessage])
+
   useEffect(() => {
     if (shareId) {
       connect()
@@ -123,6 +130,7 @@ const useWebSocket = (shareId) => {
     updateItem,
     toggleCompleted,
     switchSupplier,
+    broadcastUpdate,
     disconnect
   }
 }

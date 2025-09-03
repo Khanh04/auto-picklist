@@ -22,7 +22,7 @@ class PicklistService {
                 quantity: orderItem.quantity,
                 item: orderItem.item,
                 originalItem: orderItem.item,
-                selectedSupplier: matchResult.supplier || 'No supplier found',
+                selectedSupplier: matchResult.supplier || 'back order',
                 unitPrice: matchResult.price || 'No price found',
                 totalPrice: matchResult.price ? (matchResult.price * orderItem.quantity).toFixed(2) : 'N/A',
                 matchedItemId: matchResult.productId,
@@ -80,7 +80,7 @@ class PicklistService {
 
             // Count by supplier
             const supplier = item.selectedSupplier;
-            if (supplier !== 'No supplier found') {
+            if (supplier !== 'back order') {
                 summary.supplierBreakdown[supplier] = (summary.supplierBreakdown[supplier] || 0) + price;
             } else {
                 summary.unmatchedItems++;
@@ -121,8 +121,8 @@ class PicklistService {
                 errors.push(`Item ${index + 1}: Missing or invalid quantity`);
             }
 
-            if (item.selectedSupplier === 'No supplier found') {
-                warnings.push(`Item ${index + 1}: No supplier found for "${item.item}"`);
+            if (item.selectedSupplier === 'back order') {
+                warnings.push(`Item ${index + 1}: back order for "${item.item}"`);
             }
 
             if (item.unitPrice === 'No price found') {

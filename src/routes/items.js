@@ -164,7 +164,7 @@ router.post('/:productId/switch-supplier',
             });
         }
 
-        // If there's only one supplier, offer manual selection with "No supplier found" option
+        // If there's only one supplier, offer manual selection with "back order" option
         if (suppliers.length === 1) {
             return res.json({
                 success: false,

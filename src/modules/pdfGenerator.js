@@ -38,7 +38,7 @@ function generateSupplierColor(supplierName) {
     const cleanName = supplierName ? supplierName.trim() : '';
     
     // Handle special case for no supplier
-    if (!cleanName || cleanName === 'No supplier found') {
+    if (!cleanName || cleanName === 'back order') {
         return '#888888';
     }
     
@@ -96,7 +96,7 @@ function calculateSummary(picklistData) {
     const totalCost = picklistData
         .filter(item => !isNaN(parseFloat(item.totalPrice)))
         .reduce((sum, item) => sum + parseFloat(item.totalPrice), 0);
-    const itemsWithSuppliers = picklistData.filter(item => item.selectedSupplier !== 'No supplier found').length;
+    const itemsWithSuppliers = picklistData.filter(item => item.selectedSupplier !== 'back order').length;
     
     return { totalItems, totalCost, itemsWithSuppliers };
 }
@@ -137,7 +137,7 @@ function formatRowData(item) {
     return [
         (item.quantity || 0).toString(),
         itemName ? (itemName.length > 50 ? itemName.substring(0, 47) + '...' : itemName) : '',
-        item.selectedSupplier || 'No supplier found',
+        item.selectedSupplier || 'back order',
         typeof item.unitPrice === 'number' ? `$${item.unitPrice.toFixed(2)}` : (item.unitPrice || 'N/A'),
         typeof item.totalPrice === 'string' && item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : (item.totalPrice || 'N/A')
     ];

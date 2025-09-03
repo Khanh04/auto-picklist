@@ -283,10 +283,10 @@ class MultiCsvService {
             totalUniqueItems: allItems.length,
             duplicatesAcrossFiles: duplicatesAcrossFiles.length,
             itemsWithSuppliers: allItems.filter(item => 
-                item.selectedSupplier && item.selectedSupplier !== 'No supplier found'
+                item.selectedSupplier && item.selectedSupplier !== 'back order'
             ).length,
             itemsWithoutSuppliers: allItems.filter(item => 
-                !item.selectedSupplier || item.selectedSupplier === 'No supplier found'
+                !item.selectedSupplier || item.selectedSupplier === 'back order'
             ).length,
             averageQuantityPerItem: allItems.length > 0
                 ? Math.round(allItems.reduce((sum, item) => sum + (item.quantity || 0), 0) / allItems.length)
@@ -314,7 +314,7 @@ class MultiCsvService {
         const supplierTotals = {};
 
         allItems.forEach(item => {
-            if (item.selectedSupplier && item.selectedSupplier !== 'No supplier found') {
+            if (item.selectedSupplier && item.selectedSupplier !== 'back order') {
                 supplierCounts[item.selectedSupplier] = (supplierCounts[item.selectedSupplier] || 0) + 1;
                 
                 const totalPrice = parseFloat(item.totalPrice) || 0;
