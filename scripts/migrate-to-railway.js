@@ -4,14 +4,27 @@ const path = require('path');
 const { waitForDatabase } = require('./wait-for-db');
 
 // Railway PostgreSQL connection using environment variables
-const railwayPool = new Pool({
-    user: process.env.PGUSER,
-    host: process.env.PGHOST,
-    database: process.env.PGDATABASE,
-    password: process.env.PGPASSWORD,
-    port: process.env.PGPORT,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+const getRailwayConfig = () => {
+    const databaseUrl = process.env.DATABASE_URL;
+    
+    if (databaseUrl) {
+        return {
+            connectionString: databaseUrl,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        };
+    } else {
+        return {
+            user: process.env.PGUSER || process.env.DB_USER,
+            host: process.env.PGHOST || process.env.DB_HOST,
+            database: process.env.PGDATABASE || process.env.DB_NAME,
+            password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
+            port: process.env.PGPORT || process.env.DB_PORT || 5432,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        };
+    }
+};
+
+const railwayPool = new Pool(getRailwayConfig());
 
 // Local PostgreSQL connection (for data export)
 const localPool = new Pool({

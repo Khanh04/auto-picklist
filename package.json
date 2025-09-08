@@ -25,8 +25,9 @@
     "docker:logs": "docker-compose logs -f",
     "migrate:railway": "node scripts/migrate-to-railway.js",
     "wait-for-db": "node scripts/wait-for-db.js",
-    "deploy:railway": "node scripts/wait-for-db.js && npm run migrate:railway && npm start",
-    "test:migration": "node scripts/test-migration.js"
+    "deploy:railway": "node scripts/railway-deploy.js",
+    "test:migration": "node scripts/test-migration.js",
+    "debug:env": "node scripts/debug-env.js"
   },
   "keywords": [
     "react",

@@ -60,6 +60,12 @@ async function testMigration() {
             throw new Error('❌ deploy:railway script missing');
         }
         
+        if (package.scripts['debug:env']) {
+            console.log('✅ debug:env script exists');
+        } else {
+            throw new Error('❌ debug:env script missing');
+        }
+        
         // Test 4: Configuration files
         console.log('\n4. Testing configuration files...');
         const fs = require('fs');

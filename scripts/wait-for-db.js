@@ -1,18 +1,34 @@
 const { Pool } = require('pg');
 
 async function waitForDatabase(maxAttempts = 60) {
-    const pool = new Pool({
-        user: process.env.PGUSER,
-        host: process.env.PGHOST,
-        database: process.env.PGDATABASE,
-        password: process.env.PGPASSWORD,
-        port: process.env.PGPORT,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-        connectionTimeoutMillis: 5000,
-    });
-
-    console.log('⏳ Waiting for database connection...');
-    console.log(`🔗 Connecting to: ${process.env.PGHOST}:${process.env.PGPORT}/${process.env.PGDATABASE}`);
+    // Check for Railway database URL first, then individual variables
+    const databaseUrl = process.env.DATABASE_URL;
+    
+    let config;
+    if (databaseUrl) {
+        config = {
+            connectionString: databaseUrl,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            connectionTimeoutMillis: 5000,
+        };
+        console.log('⏳ Waiting for database connection...');
+        console.log('🔗 Using DATABASE_URL connection string');
+    } else {
+        // Fallback to individual environment variables
+        config = {
+            user: process.env.PGUSER || process.env.DB_USER,
+            host: process.env.PGHOST || process.env.DB_HOST,
+            database: process.env.PGDATABASE || process.env.DB_NAME,
+            password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
+            port: process.env.PGPORT || process.env.DB_PORT || 5432,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            connectionTimeoutMillis: 5000,
+        };
+        console.log('⏳ Waiting for database connection...');
+        console.log(`🔗 Connecting to: ${config.host}:${config.port}/${config.database}`);
+    }
+    
+    const pool = new Pool(config);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
