@@ -163,7 +163,9 @@ async function setupDatabaseSchema() {
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
                 description TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                search_description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -175,6 +177,7 @@ async function setupDatabaseSchema() {
                 product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
                 price DECIMAL(10,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(supplier_id, product_id)
             )
         `);
