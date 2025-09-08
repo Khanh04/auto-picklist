@@ -27,7 +27,8 @@
     "wait-for-db": "node scripts/wait-for-db.js",
     "deploy:railway": "node scripts/railway-deploy.js",
     "test:migration": "node scripts/test-migration.js",
-    "debug:env": "node scripts/debug-env.js"
+    "debug:env": "node scripts/debug-env.js",
+    "test:db": "node scripts/railway-db-check.js"
   },
   "keywords": [
     "react",

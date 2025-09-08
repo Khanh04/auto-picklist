@@ -5,12 +5,13 @@ const { waitForDatabase } = require('./wait-for-db');
 
 // Railway PostgreSQL connection using environment variables
 const getRailwayConfig = () => {
-    const databaseUrl = process.env.DATABASE_URL;
+    const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
     
     if (databaseUrl) {
         return {
             connectionString: databaseUrl,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            ssl: false, // Railway internal network doesn't need SSL
+            connectionTimeoutMillis: 10000,
         };
     } else {
         return {
@@ -19,7 +20,8 @@ const getRailwayConfig = () => {
             database: process.env.PGDATABASE || process.env.DB_NAME,
             password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
             port: process.env.PGPORT || process.env.DB_PORT || 5432,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            ssl: false, // Railway internal network doesn't need SSL
+            connectionTimeoutMillis: 10000,
         };
     }
 };
