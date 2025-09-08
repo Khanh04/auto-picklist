@@ -16,11 +16,11 @@ const config = {
 
     // Database configuration
     database: {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 5432,
-        name: process.env.DB_NAME || 'autopicklist',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
+        host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.PGPORT || process.env.DB_PORT) || 5432,
+        name: process.env.PGDATABASE || process.env.DB_NAME || 'autopicklist',
+        user: process.env.PGUSER || process.env.DB_USER || 'postgres',
+        password: process.env.PGPASSWORD || process.env.DB_PASSWORD || '',
         maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS) || 20,
         idleTimeoutMs: parseInt(process.env.DB_IDLE_TIMEOUT) || 30000,
         connectionTimeoutMs: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 2000

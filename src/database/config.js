@@ -10,6 +10,8 @@ const dbConfig = {
     max: config.database.maxConnections,
     idleTimeoutMillis: config.database.idleTimeoutMs,
     connectionTimeoutMillis: config.database.connectionTimeoutMs,
+    // Handle Railway SSL requirements
+    ssl: config.isProduction() ? false : false, // Railway internal network doesn't need SSL
 };
 
 // Create connection pool
