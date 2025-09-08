@@ -109,7 +109,13 @@ async function setupDatabaseSchema() {
         await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS matching_preferences (
                 id SERIAL PRIMARY KEY,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                original_item TEXT NOT NULL,
+                matched_product_id INTEGER NOT NULL,
+                frequency INTEGER DEFAULT 1,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (matched_product_id) REFERENCES products(id),
+                UNIQUE(original_item, matched_product_id)
             )
         `);
 
@@ -118,6 +124,8 @@ async function setupDatabaseSchema() {
             CREATE INDEX IF NOT EXISTS idx_supplier_prices_supplier_id ON supplier_prices(supplier_id);
             CREATE INDEX IF NOT EXISTS idx_supplier_prices_product_id ON supplier_prices(product_id);
             CREATE INDEX IF NOT EXISTS idx_shopping_list_items_list_id ON shopping_list_items(shopping_list_id);
+            CREATE INDEX IF NOT EXISTS idx_matching_preferences_original_item ON matching_preferences(original_item);
+            CREATE INDEX IF NOT EXISTS idx_matching_preferences_product_id ON matching_preferences(matched_product_id);
         `);
 
         // Create view for easy querying (drop first to avoid conflicts)
