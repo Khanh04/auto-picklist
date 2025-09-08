@@ -48,6 +48,101 @@ async function checkDatabaseExists() {
     }
 }
 
+async function migrateMatchingPreferencesTable() {
+    console.log('🔧 Migrating matching_preferences table...');
+    
+    try {
+        // Check if table exists and get its columns
+        const tableExists = await railwayPool.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'matching_preferences'
+            )
+        `);
+        
+        if (!tableExists.rows[0].exists) {
+            // Create table with full schema
+            await railwayPool.query(`
+                CREATE TABLE matching_preferences (
+                    id SERIAL PRIMARY KEY,
+                    original_item TEXT NOT NULL,
+                    matched_product_id INTEGER NOT NULL,
+                    frequency INTEGER DEFAULT 1,
+                    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (matched_product_id) REFERENCES products(id),
+                    UNIQUE(original_item, matched_product_id)
+                )
+            `);
+            console.log('✅ Created matching_preferences table with full schema');
+        } else {
+            // Table exists, check and add missing columns
+            const columns = await railwayPool.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'matching_preferences'
+            `);
+            
+            const existingColumns = columns.rows.map(row => row.column_name);
+            console.log('📋 Existing columns:', existingColumns.join(', '));
+            
+            // Add missing columns
+            if (!existingColumns.includes('original_item')) {
+                await railwayPool.query(`ALTER TABLE matching_preferences ADD COLUMN original_item TEXT`);
+                console.log('✅ Added original_item column');
+            }
+            
+            if (!existingColumns.includes('matched_product_id')) {
+                await railwayPool.query(`ALTER TABLE matching_preferences ADD COLUMN matched_product_id INTEGER`);
+                console.log('✅ Added matched_product_id column');
+            }
+            
+            if (!existingColumns.includes('frequency')) {
+                await railwayPool.query(`ALTER TABLE matching_preferences ADD COLUMN frequency INTEGER DEFAULT 1`);
+                console.log('✅ Added frequency column');
+            }
+            
+            if (!existingColumns.includes('last_used')) {
+                await railwayPool.query(`ALTER TABLE matching_preferences ADD COLUMN last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+                console.log('✅ Added last_used column');
+            }
+            
+            // Try to add constraints (ignore errors if they exist)
+            try {
+                await railwayPool.query(`
+                    ALTER TABLE matching_preferences 
+                    ADD CONSTRAINT fk_matched_product_id 
+                    FOREIGN KEY (matched_product_id) REFERENCES products(id)
+                `);
+                console.log('✅ Added foreign key constraint');
+            } catch (error) {
+                if (!error.message.includes('already exists')) {
+                    console.log('ℹ️  Foreign key constraint issue:', error.message);
+                }
+            }
+            
+            try {
+                await railwayPool.query(`
+                    ALTER TABLE matching_preferences 
+                    ADD CONSTRAINT unique_original_matched 
+                    UNIQUE(original_item, matched_product_id)
+                `);
+                console.log('✅ Added unique constraint');
+            } catch (error) {
+                if (!error.message.includes('already exists')) {
+                    console.log('ℹ️  Unique constraint issue:', error.message);
+                }
+            }
+        }
+        
+        console.log('✅ matching_preferences table migration completed');
+        
+    } catch (error) {
+        console.error('❌ Failed to migrate matching_preferences table:', error.message);
+        throw error;
+    }
+}
+
 async function setupDatabaseSchema() {
     console.log('🏗️  Setting up database schema...');
     
@@ -105,19 +200,8 @@ async function setupDatabaseSchema() {
             )
         `);
 
-        // Create matching_preferences table
-        await railwayPool.query(`
-            CREATE TABLE IF NOT EXISTS matching_preferences (
-                id SERIAL PRIMARY KEY,
-                original_item TEXT NOT NULL,
-                matched_product_id INTEGER NOT NULL,
-                frequency INTEGER DEFAULT 1,
-                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (matched_product_id) REFERENCES products(id),
-                UNIQUE(original_item, matched_product_id)
-            )
-        `);
+        // Handle matching_preferences table migration
+        await migrateMatchingPreferencesTable();
 
         // Create indexes for better performance
         await railwayPool.query(`
