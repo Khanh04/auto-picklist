@@ -1,0 +1,26 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "./scripts/railway-start.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "auto-picklist-app"
+
+[services.build]
+buildCommand = "npm ci && npm run build"
+
+[services.deploy]
+startCommand = "./scripts/railway-start.sh"
+
+[[services]]
+name = "postgres"
+source = "postgresql"
+
+[services.database]
+postgresqlDatabase = "autopicklist"
