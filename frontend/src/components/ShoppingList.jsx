@@ -41,6 +41,13 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const [quantityModalData, setQuantityModalData] = useState(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
 
+  // Helper function to calculate if an item is checked based on quantities
+  const isItemChecked = (item) => {
+    const purchasedQty = item.purchasedQuantity || 0;
+    const requestedQty = item.requestedQuantity || parseInt(item.quantity) || 1;
+    return purchasedQty >= requestedQty;
+  };
+
   // Unified data sync manager - handles all update scenarios
   const syncPicklistData = async (updateFunction, options = {}) => {
     const { 
@@ -212,7 +219,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           const dbCheckedIndices = new Set();
           const newPartialQuantities = new Map();
           result.data.picklist.forEach((item, index) => {
-            if (item.isChecked) {
+            if (isItemChecked(item)) {
               dbCheckedIndices.add(index);
             }
             if (item.purchasedQuantity && item.purchasedQuantity > 0) {
@@ -258,12 +265,11 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   // Load checked items - from database for shared lists, localStorage for local lists
   useEffect(() => {
     if (shareId) {
-      // For shared lists, the state is loaded from the database via the picklist prop
-      // which already includes isChecked state from the API
+      // For shared lists, calculate checked state from quantities
       const checkedIndices = new Set();
       if (currentPicklist) {
         currentPicklist.forEach((item, index) => {
-          if (item.isChecked) {
+          if (isItemChecked(item)) {
             checkedIndices.add(index);
           }
         });
@@ -414,7 +420,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     // For shared lists, use the dedicated item check API
     if (shareId) {
       try {
-        // Calculate purchased quantity based on checked state
+        // Send purchased quantity to backend
         const item = currentPicklist[index];
         const totalQuantity = parseInt(item.quantity) || 1;
         const purchasedQuantity = willBeChecked ? totalQuantity : 0;
@@ -428,6 +434,19 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         if (response.ok) {
           console.log(`✅ Synced item ${index} check state to database: ${willBeChecked ? 'checked' : 'unchecked'}`);
           
+          // Update the item's purchased quantity in local state
+          const result = await response.json();
+          if (result.success && result.data) {
+            setCurrentPicklist(prev => {
+              const updated = [...prev];
+              updated[index] = {
+                ...updated[index],
+                purchasedQuantity: result.data.purchasedQuantity,
+                requestedQuantity: result.data.requestedQuantity
+              };
+              return updated;
+            });
+          }
           
           // Broadcast update to other clients
           if (broadcastUpdate) {
@@ -474,6 +493,23 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ purchasedQuantity: 0 })
             });
+            
+            // Update local state with the response data
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data) {
+                setCurrentPicklist(prev => {
+                  const updated = [...prev];
+                  updated[index] = {
+                    ...updated[index],
+                    purchasedQuantity: result.data.purchasedQuantity,
+                    requestedQuantity: result.data.requestedQuantity
+                  };
+                  return updated;
+                });
+              }
+            }
+            
             return response.ok;
           });
 
@@ -541,6 +577,23 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ purchasedQuantity })
           });
+          
+          // Update local state with the response data
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+              setCurrentPicklist(prev => {
+                const updated = [...prev];
+                updated[item.index] = {
+                  ...updated[item.index],
+                  purchasedQuantity: result.data.purchasedQuantity,
+                  requestedQuantity: result.data.requestedQuantity
+                };
+                return updated;
+              });
+            }
+          }
+          
           return response.ok;
         });
 

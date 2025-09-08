@@ -192,13 +192,14 @@ async function setupDatabaseSchema() {
             )
         `);
 
-        // Create shopping_list_items table with purchased_quantity column
+        // Create shopping_list_items table with purchased_quantity and requested_quantity columns
         await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS shopping_list_items (
                 id SERIAL PRIMARY KEY,
                 shopping_list_id INTEGER REFERENCES shopping_lists(id) ON DELETE CASCADE,
                 item_index INTEGER NOT NULL,
                 purchased_quantity INTEGER DEFAULT 0 NOT NULL,
+                requested_quantity INTEGER DEFAULT 1 NOT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);

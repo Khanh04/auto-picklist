@@ -69,15 +69,19 @@ router.post('/share',
             const createdAt = insertResult.rows[0].created_at;
             const expiresAt = insertResult.rows[0].expires_at;
 
-            // Initialize all items as unchecked
-            const itemInserts = cleanPicklist.map((_, index) => [shoppingListId, index, false]);
+            // Initialize all items with their requested quantities
+            const itemInserts = cleanPicklist.map((item, index) => [
+                shoppingListId, 
+                index, 
+                parseInt(item.quantity) || 1  // requested_quantity from picklist
+            ]);
             
             if (itemInserts.length > 0) {
                 const valueStrings = itemInserts.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(',');
                 const values = itemInserts.flat();
                 
                 await pool.query(`
-                    INSERT INTO shopping_list_items (shopping_list_id, item_index, is_checked)
+                    INSERT INTO shopping_list_items (shopping_list_id, item_index, requested_quantity)
                     VALUES ${valueStrings}
                 `, values);
             }
@@ -125,7 +129,7 @@ router.get('/share/:shareId', asyncHandler(async (req, res) => {
         
         // Get item states
         const itemsResult = await pool.query(`
-            SELECT item_index, is_checked, checked_at, updated_at
+            SELECT item_index, purchased_quantity, requested_quantity, updated_at
             FROM shopping_list_items
             WHERE shopping_list_id = $1
             ORDER BY item_index
@@ -135,9 +139,9 @@ router.get('/share/:shareId', asyncHandler(async (req, res) => {
         const itemStates = new Map();
         itemsResult.rows.forEach(row => {
             itemStates.set(row.item_index, {
-                isChecked: row.is_checked,
-                checkedAt: row.checked_at,
-                updatedAt: row.updated_at
+                updatedAt: row.updated_at,
+                purchasedQuantity: row.purchased_quantity,
+                requestedQuantity: row.requested_quantity
             });
         });
 
@@ -145,8 +149,8 @@ router.get('/share/:shareId', asyncHandler(async (req, res) => {
         const picklistWithStates = shoppingList.picklist_data.map((item, index) => ({
             ...item,
             index,
-            isChecked: itemStates.get(index)?.isChecked || false,
-            checkedAt: itemStates.get(index)?.checkedAt,
+            purchasedQuantity: itemStates.get(index)?.purchasedQuantity || 0,
+            requestedQuantity: itemStates.get(index)?.requestedQuantity || parseInt(item.quantity) || 1,
             updatedAt: itemStates.get(index)?.updatedAt
         }));
 
@@ -176,14 +180,14 @@ router.get('/share/:shareId', asyncHandler(async (req, res) => {
  */
 router.put('/share/:shareId/item/:itemIndex',
     validateBody({
-        isChecked: {
+        purchasedQuantity: {
             required: true,
-            type: 'boolean'
+            type: 'number'
         }
     }),
     asyncHandler(async (req, res) => {
         const { shareId, itemIndex } = req.params;
-        const { isChecked } = req.body;
+        const { purchasedQuantity } = req.body;
         
         try {
             // First get the shopping list ID
@@ -202,15 +206,14 @@ router.put('/share/:shareId/item/:itemIndex',
             const shoppingListId = listResult.rows[0].id;
             const itemIndexInt = parseInt(itemIndex);
 
-            // Update the item state
+            // Update the item state with the provided purchased quantity
             const updateResult = await pool.query(`
                 UPDATE shopping_list_items 
-                SET is_checked = $1, 
-                    checked_at = CASE WHEN $1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+                SET purchased_quantity = $1,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE shopping_list_id = $2 AND item_index = $3
-                RETURNING is_checked, checked_at, updated_at
-            `, [isChecked, shoppingListId, itemIndexInt]);
+                RETURNING purchased_quantity, requested_quantity, updated_at
+            `, [purchasedQuantity, shoppingListId, itemIndexInt]);
 
             if (updateResult.rows.length === 0) {
                 return res.status(404).json({
@@ -225,9 +228,9 @@ router.put('/share/:shareId/item/:itemIndex',
                 success: true,
                 data: {
                     itemIndex: itemIndexInt,
-                    isChecked: updatedItem.is_checked,
-                    checkedAt: updatedItem.checked_at,
-                    updatedAt: updatedItem.updated_at
+                    updatedAt: updatedItem.updated_at,
+                    purchasedQuantity: updatedItem.purchased_quantity,
+                    requestedQuantity: updatedItem.requested_quantity
                 }
             });
 
@@ -329,7 +332,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
         const itemStatsResult = await pool.query(`
             SELECT 
                 COUNT(*) as total_items,
-                COUNT(CASE WHEN is_checked THEN 1 END) as checked_items
+                COUNT(CASE WHEN purchased_quantity >= requested_quantity THEN 1 END) as checked_items
             FROM shopping_list_items sli
             JOIN shopping_lists sl ON sli.shopping_list_id = sl.id
             WHERE sl.expires_at > CURRENT_TIMESTAMP
