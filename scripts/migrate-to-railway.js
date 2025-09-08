@@ -241,16 +241,35 @@ async function importSeedData() {
     
     try {
         const path = require('path');
-        const seedDataPath = path.join(__dirname, '..', 'data', 'seed-data.sql');
+        const fs = require('fs');
         
-        // Check if seed data file exists
-        if (!require('fs').existsSync(seedDataPath)) {
-            console.log('ℹ️  No seed data file found, continuing with empty database');
+        // Try multiple possible paths for the seed data file
+        const possiblePaths = [
+            path.join(__dirname, '..', 'data', 'seed-data.sql'),
+            path.join(process.cwd(), 'data', 'seed-data.sql'),
+            path.join(__dirname, '..', '..', 'data', 'seed-data.sql'),
+            './data/seed-data.sql'
+        ];
+        
+        let seedDataPath = null;
+        for (const testPath of possiblePaths) {
+            console.log(`🔍 Checking for seed data at: ${testPath}`);
+            if (fs.existsSync(testPath)) {
+                seedDataPath = testPath;
+                console.log(`✅ Found seed data file at: ${seedDataPath}`);
+                break;
+            }
+        }
+        
+        if (!seedDataPath) {
+            console.log('ℹ️  No seed data file found at any location');
+            console.log('📂 Current working directory:', process.cwd());
+            console.log('📂 Script directory:', __dirname);
             return false;
         }
         
         // Read the SQL dump file
-        const seedData = await fs.readFile(seedDataPath, 'utf8');
+        const seedData = fs.readFileSync(seedDataPath, 'utf8');
         console.log(`📊 Found seed data file (${Math.round(seedData.length / 1024)}KB)`);
         
         // Execute the seed data SQL
