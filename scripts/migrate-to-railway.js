@@ -277,7 +277,35 @@ async function importSeedData() {
         
         // Execute the complete SQL dump (contains schema + data)
         console.log('🔄 Executing complete database dump (schema + data)...');
-        await railwayPool.query(seedData);
+        
+        // Execute with error handling for constraint issues
+        try {
+            await railwayPool.query(seedData);
+        } catch (error) {
+            if (error.message.includes('depends on it') || error.message.includes('does not exist')) {
+                console.log('ℹ️  Some constraints/objects already exist or missing, continuing...');
+                
+                // Try to execute in parts - split on statement terminators and execute individually
+                const statements = seedData.split(';').filter(stmt => stmt.trim().length > 0);
+                
+                for (const statement of statements) {
+                    try {
+                        if (statement.trim()) {
+                            await railwayPool.query(statement.trim());
+                        }
+                    } catch (stmtError) {
+                        // Log but don't fail on individual statement errors
+                        if (!stmtError.message.includes('already exists') && 
+                            !stmtError.message.includes('does not exist') &&
+                            !stmtError.message.includes('depends on it')) {
+                            console.log(`⚠️  Statement warning: ${stmtError.message.substring(0, 100)}`);
+                        }
+                    }
+                }
+            } else {
+                throw error; // Re-throw if it's not a constraint issue
+            }
+        }
         
         // Check what was imported
         const supplierCount = await railwayPool.query('SELECT COUNT(*) FROM suppliers');
@@ -296,16 +324,7 @@ async function importSeedData() {
     }
 }
 
-async function migrateDataFromLocal() {
-    console.log('🔄 Checking for data migration...');
-    
-    // Try to import from seed data file first
-    const seedImported = await importSeedData();
-    if (seedImported) {
-        console.log('✅ Data migration completed from seed file');
-        return true;
-    }
-    
+async function migrateDataFromLocalDatabase() {
     console.log('🔄 Attempting local database migration...');
     
     try {
@@ -422,16 +441,21 @@ async function runMigration() {
             process.exit(1);
         }
 
-        // Import data from complete seed file (includes schema + data)
-        const dataImported = await migrateDataFromLocal();
+        // Try to import from complete seed file first (includes schema + data)
+        console.log('🔄 Attempting to import from seed file...');
+        const dataImported = await importSeedData();
+        
         if (!dataImported) {
-            console.log('📋 No seed data imported, creating basic schema...');
-            // Only create schema if seed data import failed
+            console.log('📋 No seed data imported, setting up basic schema and trying local migration...');
+            // Create schema first, then try local migration
             const schemaCreated = await setupDatabaseSchema();
             if (!schemaCreated) {
                 console.error('❌ Failed to create database schema');
                 process.exit(1);
             }
+            
+            // Try local database migration as fallback
+            await migrateDataFromLocalDatabase();
         }
 
         // Run post-migration tasks
