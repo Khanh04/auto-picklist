@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { devLog } from '../utils/logger'
 
 const useWebSocket = (shareId) => {
   const ws = useRef(null)
@@ -13,11 +14,11 @@ const useWebSocket = (shareId) => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsUrl = `${protocol}//${window.location.host}`
       
-      console.log('Attempting WebSocket connection to:', wsUrl)
+      devLog('Attempting WebSocket connection to:', wsUrl)
       ws.current = new WebSocket(wsUrl)
 
       ws.current.onopen = () => {
-        console.log('WebSocket connected')
+        devLog('WebSocket connected')
         setIsConnected(true)
         setConnectionError(null)
         
@@ -41,7 +42,7 @@ const useWebSocket = (shareId) => {
       }
 
       ws.current.onclose = () => {
-        console.log('WebSocket disconnected')
+        devLog('WebSocket disconnected')
         setIsConnected(false)
         
         // Attempt to reconnect after 3 seconds

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
+import { devLog } from './utils/logger'
+import { PicklistProvider, usePicklist } from './contexts/PicklistContext'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
@@ -26,26 +28,7 @@ function AppContent() {
   const navigate = useNavigate()
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
-  const [editedPicklist, setEditedPicklist] = useState(null)
 
-  // Load saved picklist from database on app start
-  useEffect(() => {
-    const loadSavedPicklist = async () => {
-      try {
-        const response = await fetch('/api/session/picklist');
-        const result = await response.json();
-        
-        if (result.success && result.picklist) {
-          setEditedPicklist(result.picklist);
-          console.log(`Loaded saved picklist with ${result.itemCount} items from database`);
-        }
-      } catch (error) {
-        console.warn('Failed to load saved picklist from database:', error);
-      }
-    };
-    
-    loadSavedPicklist();
-  }, []);
 
   const handleFileUpload = async (file) => {
     navigate('/processing')
@@ -62,12 +45,11 @@ function AppContent() {
       })
 
       const result = await response.json()
-      console.log('Upload result:', result)
+      devLog('Upload result:', result)
 
       if (result.success) {
-        console.log('Picklist items:', result.picklist)
+        devLog('Picklist items:', result.picklist)
         setResults(result)
-        setEditedPicklist(null)
         // Clear database session when new file is uploaded
         fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
         navigate('/')
@@ -93,7 +75,7 @@ function AppContent() {
       })
       formData.append('useDatabase', 'true')
 
-      console.log(`Uploading ${files.length} CSV files for combined processing...`)
+      devLog(`Uploading ${files.length} CSV files for combined processing...`)
 
       const response = await fetch('/api/multi-csv/upload', {
         method: 'POST',
@@ -101,7 +83,7 @@ function AppContent() {
       })
 
       const result = await response.json()
-      console.log('Multi-CSV upload result:', result)
+      devLog('Multi-CSV upload result:', result)
 
       if (result.success) {
         // Transform multi-CSV results to be compatible with existing UI
@@ -118,9 +100,8 @@ function AppContent() {
           }
         }
         
-        console.log('Combined picklist items:', result.combinedPicklist)
+        devLog('Combined picklist items:', result.combinedPicklist)
         setResults(transformedResult)
-        setEditedPicklist(null)
         // Clear database session when new file is uploaded
         fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
         navigate('/')
@@ -137,7 +118,6 @@ function AppContent() {
 
   const handleReset = () => {
     setResults(null)
-    setEditedPicklist(null)
     setError(null)
     // Clear database session when resetting
     fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
@@ -148,35 +128,6 @@ function AppContent() {
     // No-op - export handled in preview component
   }
 
-  const handlePicklistUpdate = (updatedPicklist) => {
-    setEditedPicklist(updatedPicklist)
-    
-    // Also save to database
-    const saveToDatabase = async () => {
-      try {
-        const response = await fetch('/api/session/picklist', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            picklist: updatedPicklist
-          })
-        });
-        
-        if (response.ok) {
-          console.log('Saved picklist changes to database');
-        } else {
-          console.error('Failed to save picklist changes to database');
-        }
-      } catch (error) {
-        console.warn('Failed to save picklist to database:', error);
-      }
-    };
-    
-    // Save asynchronously
-    saveToDatabase();
-  }
 
   // Shared Shopping List Component
   const SharedShoppingListPage = () => {
@@ -219,9 +170,6 @@ function AppContent() {
         ) : (
           <PicklistPreview
             results={results}
-            editedPicklist={editedPicklist}
-            onPicklistUpdate={handlePicklistUpdate}
-            onExport={handleExportPicklist}
             onBack={handleReset}
             onNavigate={(view) => navigate(`/${view}`)}
           />
@@ -238,9 +186,6 @@ function AppContent() {
       <main className="flex-1">
         <PicklistPreview
           results={results}
-          editedPicklist={editedPicklist}
-          onPicklistUpdate={handlePicklistUpdate}
-          onExport={handleExportPicklist}
           onBack={handleReset}
           onNavigate={(view) => navigate(`/${view}`)}
         />
@@ -251,7 +196,7 @@ function AppContent() {
 
   // Shopping List Page Component - creates/redirects to shared shopping list
   const ShoppingListPage = () => {
-    const currentPicklist = editedPicklist || (results && results.picklist)
+    const { picklist: currentPicklist } = usePicklist()
     
     React.useEffect(() => {
       if (!currentPicklist || currentPicklist.length === 0) {
@@ -350,9 +295,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <AppContent />
-      </Router>
+      <PicklistProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </PicklistProvider>
     </ThemeProvider>
   )
 }

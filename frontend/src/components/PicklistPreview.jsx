@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@mui/material'
 import Fuse from 'fuse.js'
+import { devLog } from '../utils/logger'
+import { usePicklistSync } from '../hooks/usePicklistSync'
 
-function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, onBack, onNavigate }) {
+function PicklistPreview({ results, onBack, onNavigate }) {
   const [editingCell, setEditingCell] = useState(null)
   const [availableSuppliers, setAvailableSuppliers] = useState([])
   const [availableItems, setAvailableItems] = useState([])
@@ -17,19 +19,24 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const [showBulkEdit, setShowBulkEdit] = useState(false) // Show bulk edit controls
   const [bulkMatchItem, setBulkMatchItem] = useState(null) // Item to bulk match to
 
-  // Calculate picklist directly from props
-  const currentPicklist = React.useMemo(() => {
-    if (editedPicklist) {
-      return editedPicklist
+  // Initialize picklist sync with centralized state management
+  const {
+    picklist: currentPicklist,
+    updateItem,
+    updateMultipleItems,
+    setPicklist,
+    loadInitialData
+  } = usePicklistSync(null, {
+    onPicklistUpdate: null // We'll handle updates through context now
+  })
+  
+  // Load initial picklist from results when component mounts or results change
+  useEffect(() => {
+    if (results && results.picklist && results.picklist.length > 0) {
+      devLog('Setting picklist from results:', results.picklist.length, 'items')
+      setPicklist(results.picklist)
     }
-
-    if (results && results.picklist) {
-      // Just return the picklist directly without any transformation
-      return results.picklist
-    }
-
-    return []
-  }, [results, editedPicklist])
+  }, [results, setPicklist])
   
   // Reset state when props change to a truly different picklist
   React.useEffect(() => {
@@ -44,7 +51,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       setInitialDataFetched(false)
       setLastProcessedPicklistHash(currentHash)
     }
-  }, [results, editedPicklist, lastProcessedPicklistHash])
+  }, [results, currentPicklist, lastProcessedPicklistHash])
 
   // Handle side effects separately - only run once when picklist is first available
   React.useEffect(() => {
@@ -91,7 +98,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json()
         const items = itemsData.items || []
-        console.log('PicklistPreview: Fetched items', items.length)
+        devLog('PicklistPreview: Fetched items', items.length)
         setAvailableItems(items)
         
         // Prepare options for matched item selection (only product descriptions)
@@ -100,7 +107,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
           label: item.description, // Only show description, no supplier/price
           item: item // Store full item data for easy access
         }))
-        console.log('PicklistPreview: Select options prepared', options.length)
+        devLog('PicklistPreview: Select options prepared', options.length)
         setSelectOptions(options)
         
         // Create Fuse instance for fuzzy matching (only product descriptions)
@@ -140,21 +147,29 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   }
 
   const handleSelectChange = async (selectedOption, index) => {
-    const newPicklist = [...currentPicklist]
-    newPicklist[index] = { ...newPicklist[index] }
+    let changes = {}
     
     if (!selectedOption) {
-      // Cleared selection
-      newPicklist[index].matchedItemId = null
-      newPicklist[index].manualOverride = false
-      newPicklist[index].selectedSupplier = 'back order'
-      newPicklist[index].unitPrice = ''
-      newPicklist[index].totalPrice = 'N/A'
+      // Cleared selection - restore original item description
+      const currentItem = currentPicklist[index]
+      changes = {
+        matchedItemId: null,
+        item: currentItem.originalItem, // Restore original description
+        manualOverride: false,
+        selectedSupplier: 'back order',
+        unitPrice: '',
+        totalPrice: 'N/A'
+      }
     } else {
       // Selected a product - fetch all suppliers and default to lowest price
       const selectedItem = selectedOption.item
-      newPicklist[index].matchedItemId = selectedItem.id
-      newPicklist[index].manualOverride = true
+      const currentItem = currentPicklist[index]
+      
+      changes = {
+        matchedItemId: selectedItem.id,
+        item: selectedItem.description, // Update displayed item description
+        manualOverride: true
+      }
       
       // Fetch suppliers for this product
       const suppliers = await fetchProductSuppliers(selectedItem.id)
@@ -162,89 +177,94 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       if (suppliers && suppliers.length > 0) {
         // Default to lowest price supplier (suppliers are already sorted by price)
         const defaultSupplier = suppliers[0]
-        newPicklist[index].selectedSupplier = defaultSupplier.supplier_name
-        newPicklist[index].unitPrice = defaultSupplier.price
-        newPicklist[index].totalPrice = (defaultSupplier.price * newPicklist[index].quantity).toFixed(2)
+        changes.selectedSupplier = defaultSupplier.supplier_name
+        changes.unitPrice = defaultSupplier.price
+        changes.totalPrice = (defaultSupplier.price * currentItem.quantity).toFixed(2)
       } else {
         // Fallback to original data if no specific suppliers found
-        newPicklist[index].selectedSupplier = selectedItem.bestSupplier
-        newPicklist[index].unitPrice = selectedItem.bestPrice
-        newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+        changes.selectedSupplier = selectedItem.bestSupplier
+        changes.unitPrice = selectedItem.bestPrice
+        changes.totalPrice = (selectedItem.bestPrice * currentItem.quantity).toFixed(2)
       }
     }
     
-    if (onPicklistUpdate) {
-      onPicklistUpdate(newPicklist)
-    }
+    // Update using centralized state management
+    updateItem(index, changes)
   }
 
   const handleCellEdit = (index, field, value) => {
-    const newPicklist = [...currentPicklist]
-    newPicklist[index] = { ...newPicklist[index] }
+    let changes = {}
     
     if (field === 'matchedItem') {
       // Handle matched item selection
       if (!value) {
-        // Cleared selection
-        newPicklist[index].matchedItemId = null
-        newPicklist[index].manualOverride = false
-        newPicklist[index].selectedSupplier = 'back order'
-        newPicklist[index].unitPrice = ''
-        newPicklist[index].totalPrice = 'N/A'
+        // Cleared selection - restore original item description
+        const currentItem = currentPicklist[index]
+        changes = {
+          matchedItemId: null,
+          item: currentItem.originalItem, // Restore original description
+          manualOverride: false,
+          selectedSupplier: 'back order',
+          unitPrice: '',
+          totalPrice: 'N/A'
+        }
       } else {
         // Selected an item
         const selectedItem = availableItems.find(item => item.id == value)
         if (selectedItem) {
-          newPicklist[index].matchedItemId = selectedItem.id
-          newPicklist[index].manualOverride = true
-          newPicklist[index].selectedSupplier = selectedItem.bestSupplier
-          newPicklist[index].unitPrice = selectedItem.bestPrice
-          newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+          const currentItem = currentPicklist[index]
+          changes = {
+            matchedItemId: selectedItem.id,
+            item: selectedItem.description, // Update the displayed item description
+            manualOverride: true,
+            selectedSupplier: selectedItem.bestSupplier,
+            unitPrice: selectedItem.bestPrice,
+            totalPrice: (selectedItem.bestPrice * currentItem.quantity).toFixed(2)
+          }
         }
       }
     } else if (field === 'selectedSupplier') {
-      newPicklist[index].selectedSupplier = value
+      const currentItem = currentPicklist[index]
+      changes.selectedSupplier = value
       
       // Handle "back order" case
       if (value === 'back order') {
-        newPicklist[index].unitPrice = ''
-        newPicklist[index].totalPrice = 'N/A'
-      } else if (newPicklist[index].matchedItemId && productSuppliers[newPicklist[index].matchedItemId]) {
+        changes.unitPrice = ''
+        changes.totalPrice = 'N/A'
+      } else if (currentItem.matchedItemId && productSuppliers[currentItem.matchedItemId]) {
         // If there's a matched item, update price based on selected supplier
-        const suppliers = productSuppliers[newPicklist[index].matchedItemId]
+        const suppliers = productSuppliers[currentItem.matchedItemId]
         const selectedSupplier = suppliers.find(s => s.supplier_name === value)
         
         if (selectedSupplier) {
-          newPicklist[index].unitPrice = selectedSupplier.price
-          newPicklist[index].totalPrice = (selectedSupplier.price * newPicklist[index].quantity).toFixed(2)
-        } else {
-          // Supplier not found in the product-specific list, keep current price
-          // This preserves the existing price when switching to a general supplier
+          changes.unitPrice = selectedSupplier.price
+          changes.totalPrice = (selectedSupplier.price * currentItem.quantity).toFixed(2)
         }
-      } else if (!newPicklist[index].manualOverride) {
+      } else if (!currentItem.manualOverride) {
         // Reset price if no specific supplier data available and not manually overridden
-        newPicklist[index].unitPrice = ''
-        newPicklist[index].totalPrice = 'N/A'
+        changes.unitPrice = ''
+        changes.totalPrice = 'N/A'
       }
     } else if (field === 'unitPrice') {
+      const currentItem = currentPicklist[index]
       const price = parseFloat(value)
-      newPicklist[index].unitPrice = isNaN(price) ? value : price
+      changes.unitPrice = isNaN(price) ? value : price
       if (!isNaN(price)) {
-        newPicklist[index].totalPrice = (price * newPicklist[index].quantity).toFixed(2)
+        changes.totalPrice = (price * currentItem.quantity).toFixed(2)
       } else {
-        newPicklist[index].totalPrice = 'N/A'
+        changes.totalPrice = 'N/A'
       }
     } else if (field === 'quantity') {
+      const currentItem = currentPicklist[index]
       const qty = parseInt(value)
-      newPicklist[index].quantity = isNaN(qty) ? value : qty
-      if (!isNaN(qty) && typeof newPicklist[index].unitPrice === 'number') {
-        newPicklist[index].totalPrice = (newPicklist[index].unitPrice * qty).toFixed(2)
+      changes.quantity = isNaN(qty) ? value : qty
+      if (!isNaN(qty) && typeof currentItem.unitPrice === 'number') {
+        changes.totalPrice = (currentItem.unitPrice * qty).toFixed(2)
       }
     }
     
-    if (onPicklistUpdate) {
-      onPicklistUpdate(newPicklist)
-    }
+    // Update using centralized state management
+    updateItem(index, changes)
   }
 
   const calculateSummary = () => {
@@ -298,35 +318,41 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   const handleBulkMatch = async (selectedOption) => {
     if (!selectedOption || selectedRows.size === 0) return
 
-    const newPicklist = [...currentPicklist]
     const selectedItem = selectedOption.item
 
     // Fetch suppliers for this product
     const suppliers = await fetchProductSuppliers(selectedItem.id)
 
+    // Prepare bulk updates
+    const updates = []
+    
     // Apply the bulk match to all selected rows
     for (const index of selectedRows) {
-      newPicklist[index] = { ...newPicklist[index] }
-      newPicklist[index].matchedItemId = selectedItem.id
-      newPicklist[index].manualOverride = true
+      const currentItem = currentPicklist[index]
+      let changes = {
+        matchedItemId: selectedItem.id,
+        item: selectedItem.description, // Update displayed item description
+        manualOverride: true
+      }
 
       if (suppliers && suppliers.length > 0) {
         // Default to lowest price supplier (suppliers are already sorted by price)
         const defaultSupplier = suppliers[0]
-        newPicklist[index].selectedSupplier = defaultSupplier.supplier_name
-        newPicklist[index].unitPrice = defaultSupplier.price
-        newPicklist[index].totalPrice = (defaultSupplier.price * newPicklist[index].quantity).toFixed(2)
+        changes.selectedSupplier = defaultSupplier.supplier_name
+        changes.unitPrice = defaultSupplier.price
+        changes.totalPrice = (defaultSupplier.price * currentItem.quantity).toFixed(2)
       } else {
         // Fallback to original data if no specific suppliers found
-        newPicklist[index].selectedSupplier = selectedItem.bestSupplier
-        newPicklist[index].unitPrice = selectedItem.bestPrice
-        newPicklist[index].totalPrice = (selectedItem.bestPrice * newPicklist[index].quantity).toFixed(2)
+        changes.selectedSupplier = selectedItem.bestSupplier
+        changes.unitPrice = selectedItem.bestPrice
+        changes.totalPrice = (selectedItem.bestPrice * currentItem.quantity).toFixed(2)
       }
+      
+      updates.push({ index, changes })
     }
 
-    if (onPicklistUpdate) {
-      onPicklistUpdate(newPicklist)
-    }
+    // Use bulk update from centralized state management
+    updateMultipleItems(updates)
 
     // Clear selection after bulk operation
     handleClearSelection()
@@ -402,11 +428,11 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
       })
 
       const result = await response.json()
-      console.log('Export response:', result)
+      devLog('Export response:', result)
 
       if (result.success) {
         setExportResult(result)
-        console.log('Export result set:', result)
+        devLog('Export result set:', result)
         
         // Learning preferences stored for future use
       } else {
@@ -600,7 +626,7 @@ function PicklistPreview({ results, editedPicklist, onPicklistUpdate, onExport, 
   }
 
   // Only show "no data" if we have no source data at all
-  if (!currentPicklist.length && !results?.picklist && !editedPicklist) {
+  if (!currentPicklist.length && !results?.picklist) {
     return (
       <div className="min-h-screen gradient-bg flex items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center">

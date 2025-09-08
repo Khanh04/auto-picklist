@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useWebSocket from '../hooks/useWebSocket';
+import { devLog } from '../utils/logger';
 
 function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading = false, onPicklistUpdate = null }) {
   const [checkedItems, setCheckedItems] = useState(new Set());
@@ -73,12 +74,12 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                 timestamp: Date.now(),
                 updateType: 'supplier_change'
               });
-              console.log(`📡 Broadcasted update for item ${itemIndex} to other clients`);
+              devLog(`📡 Broadcasted update for item ${itemIndex} to other clients`);
             }
 
             // 3. Handle parent callback (refresh main page for non-shared lists)
             if (saveSuccess && onPicklistUpdate) {
-              console.log(`🔄 Refreshing main page with updated data`);
+              devLog(`🔄 Refreshing main page with updated data`);
               onPicklistUpdate(newPicklist);
             }
             
@@ -107,7 +108,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         });
         
         if (response.ok) {
-          console.log('✅ Saved shared shopping list to database');
+          devLog('✅ Saved shared shopping list to database');
           return true;
         } else {
           console.error('❌ Failed to save shared shopping list to database');
@@ -122,7 +123,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         });
         
         if (response.ok) {
-          console.log('✅ Saved shopping list to session storage');
+          devLog('✅ Saved shopping list to session storage');
           return true;
         } else {
           console.error('❌ Failed to save shopping list to session storage');
@@ -197,7 +198,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
 
     // Handle picklist update signals from other users
     const unsubscribeUpdate = subscribe('picklist_updated', async (data) => {
-      console.log('Received picklist update signal:', data);
+      devLog('Received picklist update signal:', data);
       
       // Fetch fresh data from database
       try {
@@ -205,9 +206,9 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         const result = await response.json();
         
         if (result.success && result.data && result.data.picklist) {
-          console.log('Refreshed picklist data from database');
-          console.log('📊 Received picklist data:', result.data.picklist.length, 'items');
-          console.log('📊 First few items with purchasedQuantity:', result.data.picklist.slice(0, 5).map((item, idx) => ({
+          devLog('Refreshed picklist data from database');
+          devLog('📊 Received picklist data:', result.data.picklist.length, 'items');
+          devLog('📊 First few items with purchasedQuantity:', result.data.picklist.slice(0, 5).map((item, idx) => ({
             index: idx,
             purchasedQuantity: item.purchasedQuantity,
             isChecked: item.isChecked,
@@ -432,7 +433,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         });
 
         if (response.ok) {
-          console.log(`✅ Synced item ${index} check state to database: ${willBeChecked ? 'checked' : 'unchecked'}`);
+          devLog(`✅ Synced item ${index} check state to database: ${willBeChecked ? 'checked' : 'unchecked'}`);
           
           // Update the item's purchased quantity in local state
           const result = await response.json();
@@ -456,7 +457,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               timestamp: Date.now(),
               updateType: 'item_check'
             });
-            console.log(`📡 Broadcasted item ${index} check state to other clients`);
+            devLog(`📡 Broadcasted item ${index} check state to other clients`);
           }
         } else {
           console.error(`❌ Failed to sync item ${index} check state to database`);
@@ -470,7 +471,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       }
     } else {
       // For non-shared lists, just update localStorage (existing behavior)
-      console.log(`💾 Saved item ${index} check state to localStorage: ${willBeChecked ? 'checked' : 'unchecked'}`);
+      devLog(`💾 Saved item ${index} check state to localStorage: ${willBeChecked ? 'checked' : 'unchecked'}`);
     }
   };
 
@@ -517,7 +518,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           allSuccessful = results.every(success => success);
 
           if (allSuccessful) {
-            console.log(`✅ Cleared all ${previousCheckedItems.size} checked items in database`);
+            devLog(`✅ Cleared all ${previousCheckedItems.size} checked items in database`);
             
             // Broadcast update to other clients
             if (broadcastUpdate) {
@@ -526,7 +527,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                 timestamp: Date.now(),
                 updateType: 'clear_all'
               });
-              console.log(`📡 Broadcasted clear all to other clients`);
+              devLog(`📡 Broadcasted clear all to other clients`);
             }
           } else {
             console.error(`❌ Failed to clear some checked items`);
@@ -540,7 +541,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         }
       } else {
         // For non-shared lists, localStorage is already updated by useEffect
-        console.log(`💾 Cleared all ${previousCheckedItems.size} checked items in localStorage`);
+        devLog(`💾 Cleared all ${previousCheckedItems.size} checked items in localStorage`);
       }
     }
   };
@@ -601,7 +602,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         allSuccessful = results.every(success => success);
 
         if (allSuccessful) {
-          console.log(`✅ ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in database`);
+          devLog(`✅ ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in database`);
           
           // Broadcast update to other clients
           if (broadcastUpdate) {
@@ -611,7 +612,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               updateType: 'supplier_check',
               checked: willBeChecked
             });
-            console.log(`📡 Broadcasted supplier ${willBeChecked ? 'check' : 'uncheck'} to other clients`);
+            devLog(`📡 Broadcasted supplier ${willBeChecked ? 'check' : 'uncheck'} to other clients`);
           }
         } else {
           console.error(`❌ Failed to ${willBeChecked ? 'check' : 'uncheck'} some supplier items`);
@@ -625,7 +626,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       }
     } else {
       // For non-shared lists, localStorage is already updated by useEffect
-      console.log(`💾 ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in localStorage`);
+      devLog(`💾 ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in localStorage`);
     }
   };
 
@@ -682,7 +683,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     // Sync to database for shared lists
     if (shareId) {
       try {
-        console.log(`🔍 Sending to database: purchasedQuantity=${newTotalPurchased} for item ${index}`);
+        devLog(`🔍 Sending to database: purchasedQuantity=${newTotalPurchased} for item ${index}`);
         
         const response = await fetch(`/api/shopping-list/share/${shareId}/item/${index}`, {
           method: 'PUT',
@@ -693,7 +694,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         });
 
         if (response.ok) {
-          console.log(`✅ Synced item ${index} check state to database with partial quantity ${selectedQuantity}/${quantityModalData?.maxQuantity}`);
+          devLog(`✅ Synced item ${index} check state to database with partial quantity ${selectedQuantity}/${quantityModalData?.maxQuantity}`);
           
           // Broadcast update to other clients
           if (broadcastUpdate) {
@@ -763,7 +764,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     );
 
     if (result.success) {
-      console.log(`✅ Moved "${item.originalItem}" to back order`);
+      devLog(`✅ Moved "${item.originalItem}" to back order`);
     } else {
       console.error(`❌ Failed to move "${item.originalItem}" to back order`);
     }
@@ -818,7 +819,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         );
 
         if (syncResult.success) {
-          console.log(`✅ Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
+          devLog(`✅ Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
         } else {
           console.error(`❌ Failed to update supplier for "${item.originalItem}"`);
         }
@@ -865,7 +866,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     );
 
     if (result.success) {
-      console.log(`✅ Marked item ${index} as "No supplier found"`);
+      devLog(`✅ Marked item ${index} as "No supplier found"`);
     } else {
       console.error(`❌ Failed to mark item ${index} as no supplier`);
     }
@@ -899,7 +900,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       if (result.success) {
         setShareUrl(result.shareUrl);
         setShowShareOptions(true);
-        console.log('Created shared list with current state including all supplier changes');
+        devLog('Created shared list with current state including all supplier changes');
       } else {
         alert('Failed to create shareable link: ' + (result.error || 'Unknown error'));
       }
@@ -1194,7 +1195,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                     .filter(item => showCompleted || !checkedItems.has(item.index) || item.isRemainingPortion)
                     .map((item) => {
                       const isChecked = item.isPurchasedPortion || 
-                        (item.isRemainingPortion ? false : (isFullyPurchased(item, item.index) || checkedItems.has(item.index)));
+                        (item.isRemainingPortion ? getRemainingQuantity(currentPicklist[item.originalIndex], item.originalIndex) === 0 : (isFullyPurchased(item, item.index) || checkedItems.has(item.index)));
                       return (
                         <div
                           key={item.index}
