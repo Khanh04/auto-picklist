@@ -406,12 +406,8 @@ async function runMigration() {
             process.exit(1);
         }
 
-        // Try to migrate from local database (optional)
-        if (process.env.MIGRATE_FROM_LOCAL === 'true') {
-            await migrateDataFromLocal();
-        } else {
-            console.log('ℹ️  Skipping local data migration (set MIGRATE_FROM_LOCAL=true to enable)');
-        }
+        // Import data (seed file or local database)
+        await migrateDataFromLocal();
 
         // Run post-migration tasks
         await runPostMigrationTasks();
