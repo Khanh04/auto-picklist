@@ -441,8 +441,18 @@ async function runMigration() {
             process.exit(1);
         }
 
-        // Try to import from complete seed file first (includes schema + data)
-        console.log('🔄 Attempting to import from seed file...');
+        // Clear existing schema and import from complete seed file (includes schema + data)
+        console.log('🔄 Clearing existing schema and importing from seed file...');
+        
+        // Drop all tables in public schema
+        console.log('🗑️  Dropping all existing tables...');
+        await railwayPool.query(`
+            DROP SCHEMA public CASCADE;
+            CREATE SCHEMA public;
+            GRANT ALL ON SCHEMA public TO public;
+        `);
+        console.log('✅ All existing tables dropped');
+        
         const dataImported = await importSeedData();
         
         if (!dataImported) {
