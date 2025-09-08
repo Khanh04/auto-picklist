@@ -275,8 +275,8 @@ async function importSeedData() {
         const seedData = fs.readFileSync(seedDataPath, 'utf8');
         console.log(`📊 Found seed data file (${Math.round(seedData.length / 1024)}KB)`);
         
-        // Execute the seed data SQL (contains both schema and data)
-        console.log('🔄 Executing seed data SQL...');
+        // Execute the complete SQL dump (contains schema + data)
+        console.log('🔄 Executing complete database dump (schema + data)...');
         await railwayPool.query(seedData);
         
         // Check what was imported
@@ -422,7 +422,7 @@ async function runMigration() {
             process.exit(1);
         }
 
-        // Import data (seed file or local database) - seed file contains schema + data
+        // Import data from complete seed file (includes schema + data)
         const dataImported = await migrateDataFromLocal();
         if (!dataImported) {
             console.log('📋 No seed data imported, creating basic schema...');
