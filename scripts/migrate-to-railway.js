@@ -52,23 +52,28 @@ async function setupDatabaseSchema() {
     console.log('🏗️  Setting up database schema...');
     
     try {
-        // Create tables with all the latest schema
+        // Create tables with all the latest schema (step by step for better error handling)
+        
+        // Create suppliers table
         await railwayPool.query(`
-            -- Create suppliers table
             CREATE TABLE IF NOT EXISTS suppliers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
+        `);
 
-            -- Create products table
+        // Create products table  
+        await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
                 description TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
+        `);
 
-            -- Create supplier_prices table
+        // Create supplier_prices table
+        await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS supplier_prices (
                 id SERIAL PRIMARY KEY,
                 supplier_id INTEGER REFERENCES suppliers(id) ON DELETE CASCADE,
@@ -76,38 +81,49 @@ async function setupDatabaseSchema() {
                 price DECIMAL(10,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(supplier_id, product_id)
-            );
+            )
+        `);
 
-            -- Create shopping_lists table
+        // Create shopping_lists table
+        await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS shopping_lists (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
+        `);
 
-            -- Create shopping_list_items table with purchased_quantity column
+        // Create shopping_list_items table with purchased_quantity column
+        await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS shopping_list_items (
                 id SERIAL PRIMARY KEY,
                 shopping_list_id INTEGER REFERENCES shopping_lists(id) ON DELETE CASCADE,
                 item_index INTEGER NOT NULL,
                 purchased_quantity INTEGER DEFAULT 0 NOT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
+        `);
 
-            -- Create matching_preferences table
+        // Create matching_preferences table
+        await railwayPool.query(`
             CREATE TABLE IF NOT EXISTS matching_preferences (
                 id SERIAL PRIMARY KEY,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
+        `);
 
-            -- Create indexes for better performance
+        // Create indexes for better performance
+        await railwayPool.query(`
             CREATE INDEX IF NOT EXISTS idx_supplier_prices_supplier_id ON supplier_prices(supplier_id);
             CREATE INDEX IF NOT EXISTS idx_supplier_prices_product_id ON supplier_prices(product_id);
             CREATE INDEX IF NOT EXISTS idx_shopping_list_items_list_id ON shopping_list_items(shopping_list_id);
+        `);
 
-            -- Create view for easy querying
-            CREATE OR REPLACE VIEW product_supplier_prices AS
+        // Create view for easy querying (drop first to avoid conflicts)
+        await railwayPool.query(`DROP VIEW IF EXISTS product_supplier_prices`);
+        await railwayPool.query(`
+            CREATE VIEW product_supplier_prices AS
             SELECT 
                 p.id as product_id,
                 p.description,
@@ -117,7 +133,7 @@ async function setupDatabaseSchema() {
                 sp.created_at
             FROM products p
             JOIN supplier_prices sp ON p.id = sp.product_id
-            JOIN suppliers s ON sp.supplier_id = s.id;
+            JOIN suppliers s ON sp.supplier_id = s.id
         `);
 
         console.log('✅ Database schema created successfully');
@@ -128,8 +144,54 @@ async function setupDatabaseSchema() {
     }
 }
 
+async function importSeedData() {
+    console.log('🔄 Importing seed data from dump file...');
+    
+    try {
+        const path = require('path');
+        const seedDataPath = path.join(__dirname, '..', 'data', 'seed-data.sql');
+        
+        // Check if seed data file exists
+        if (!require('fs').existsSync(seedDataPath)) {
+            console.log('ℹ️  No seed data file found, continuing with empty database');
+            return false;
+        }
+        
+        // Read the SQL dump file
+        const seedData = await fs.readFile(seedDataPath, 'utf8');
+        console.log(`📊 Found seed data file (${Math.round(seedData.length / 1024)}KB)`);
+        
+        // Execute the seed data SQL
+        await railwayPool.query(seedData);
+        
+        // Check what was imported
+        const supplierCount = await railwayPool.query('SELECT COUNT(*) FROM suppliers');
+        const productCount = await railwayPool.query('SELECT COUNT(*) FROM products');
+        const priceCount = await railwayPool.query('SELECT COUNT(*) FROM supplier_prices');
+        
+        console.log(`✅ Imported seed data successfully:`);
+        console.log(`   - ${supplierCount.rows[0].count} suppliers`);
+        console.log(`   - ${productCount.rows[0].count} products`);
+        console.log(`   - ${priceCount.rows[0].count} supplier prices`);
+        
+        return true;
+    } catch (error) {
+        console.log('ℹ️  Failed to import seed data:', error.message);
+        return false;
+    }
+}
+
 async function migrateDataFromLocal() {
-    console.log('🔄 Migrating data from local database...');
+    console.log('🔄 Checking for data migration...');
+    
+    // Try to import from seed data file first
+    const seedImported = await importSeedData();
+    if (seedImported) {
+        console.log('✅ Data migration completed from seed file');
+        return true;
+    }
+    
+    console.log('🔄 Attempting local database migration...');
     
     try {
         // Check if local database is available

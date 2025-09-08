@@ -48,6 +48,7 @@ logs
 
 # Database
 *.sql
+!data/seed-data.sql
 
 # Temporary files
 tmp/
