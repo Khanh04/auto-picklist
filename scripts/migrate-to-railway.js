@@ -275,7 +275,8 @@ async function importSeedData() {
         const seedData = fs.readFileSync(seedDataPath, 'utf8');
         console.log(`📊 Found seed data file (${Math.round(seedData.length / 1024)}KB)`);
         
-        // Execute the seed data SQL
+        // Execute the seed data SQL (contains both schema and data)
+        console.log('🔄 Executing seed data SQL...');
         await railwayPool.query(seedData);
         
         // Check what was imported
@@ -421,15 +422,17 @@ async function runMigration() {
             process.exit(1);
         }
 
-        // Setup database schema
-        const schemaCreated = await setupDatabaseSchema();
-        if (!schemaCreated) {
-            console.error('❌ Failed to create database schema');
-            process.exit(1);
+        // Import data (seed file or local database) - seed file contains schema + data
+        const dataImported = await migrateDataFromLocal();
+        if (!dataImported) {
+            console.log('📋 No seed data imported, creating basic schema...');
+            // Only create schema if seed data import failed
+            const schemaCreated = await setupDatabaseSchema();
+            if (!schemaCreated) {
+                console.error('❌ Failed to create database schema');
+                process.exit(1);
+            }
         }
-
-        // Import data (seed file or local database)
-        await migrateDataFromLocal();
 
         // Run post-migration tasks
         await runPostMigrationTasks();
