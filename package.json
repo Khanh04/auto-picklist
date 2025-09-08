@@ -24,7 +24,9 @@
     "docker:stop": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
     "migrate:railway": "node scripts/migrate-to-railway.js",
-    "deploy:railway": "npm run migrate:railway && npm start"
+    "wait-for-db": "node scripts/wait-for-db.js",
+    "deploy:railway": "node scripts/wait-for-db.js && npm run migrate:railway && npm start",
+    "test:migration": "node scripts/test-migration.js"
   },
   "keywords": [
     "react",

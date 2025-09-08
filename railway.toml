@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm ci && npm run build"
 
 [deploy]
-startCommand = "./scripts/railway-start.sh"
+startCommand = "npm run deploy:railway"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
@@ -16,7 +16,7 @@ name = "auto-picklist-app"
 buildCommand = "npm ci && npm run build"
 
 [services.deploy]
-startCommand = "./scripts/railway-start.sh"
+startCommand = "npm run deploy:railway"
 
 [[services]]
 name = "postgres"

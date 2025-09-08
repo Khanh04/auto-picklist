@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const fs = require('fs').promises;
 const path = require('path');
+const { waitForDatabase } = require('./wait-for-db');
 
 // Railway PostgreSQL connection using environment variables
 const railwayPool = new Pool({
@@ -219,6 +220,9 @@ async function runMigration() {
     console.log('📋 Environment:', process.env.NODE_ENV || 'development');
     
     try {
+        // Wait for database to be ready
+        await waitForDatabase();
+        
         // Check Railway database connection
         const connected = await checkDatabaseExists();
         if (!connected) {
