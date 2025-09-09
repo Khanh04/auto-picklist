@@ -372,7 +372,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     setGroupedItems(sortedGrouped);
     setTotalCost(total);
     setCheckedCost(checked);
-  }, [currentPicklist, checkedItems]);
+  }, [currentPicklist, checkedItems, partialQuantities]);
 
   // Save checked items to localStorage (only for local lists)
   useEffect(() => {
@@ -424,7 +424,29 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         // Send purchased quantity to backend
         const item = currentPicklist[index];
         const totalQuantity = parseInt(item.quantity) || 1;
-        const purchasedQuantity = willBeChecked ? totalQuantity : 0;
+        const currentPurchasedQty = getPurchasedQuantity(index);
+        const remainingQty = getRemainingQuantity(item, index);
+        
+        // Calculate new purchased quantity
+        let purchasedQuantity;
+        if (willBeChecked) {
+          // If checking, add the remaining quantity to current purchased quantity
+          purchasedQuantity = currentPurchasedQty + remainingQty;
+        } else {
+          // If unchecking, set to 0 (unchecking a completed item)
+          purchasedQuantity = 0;
+        }
+        
+        // Update local partial quantities state immediately for UI responsiveness
+        setPartialQuantities(prev => {
+          const newMap = new Map(prev);
+          if (purchasedQuantity > 0) {
+            newMap.set(index, purchasedQuantity);
+          } else {
+            newMap.delete(index);
+          }
+          return newMap;
+        });
         
         const response = await fetch(`/api/shopping-list/share/${shareId}/item/${index}`, {
           method: 'PUT',
@@ -1192,7 +1214,23 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               {!isCollapsed && (
                 <div className="divide-y divide-gray-100">
                   {items
-                    .filter(item => showCompleted || !checkedItems.has(item.index) || item.isRemainingPortion)
+                    .filter(item => {
+                      if (showCompleted) return true;
+                      
+                      // For remaining portions, only show if remaining quantity > 0
+                      if (item.isRemainingPortion) {
+                        const remainingQty = getRemainingQuantity(currentPicklist[item.originalIndex], item.originalIndex);
+                        return remainingQty > 0;
+                      }
+                      
+                      // For purchased portions, only show when showCompleted is true (they are completed items)
+                      if (item.isPurchasedPortion) {
+                        return false; // Hide completed purchased portions when showCompleted is false
+                      }
+                      
+                      // For regular items, show if not fully purchased/checked
+                      return !isFullyPurchased(item, item.index) && !checkedItems.has(item.index);
+                    })
                     .map((item) => {
                       const isChecked = item.isPurchasedPortion || 
                         (item.isRemainingPortion ? getRemainingQuantity(currentPicklist[item.originalIndex], item.originalIndex) === 0 : (isFullyPurchased(item, item.index) || checkedItems.has(item.index)));
