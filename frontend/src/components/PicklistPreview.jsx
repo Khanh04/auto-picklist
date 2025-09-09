@@ -272,6 +272,10 @@ function PicklistPreview({ results, onBack, onNavigate }) {
       item.selectedSupplier !== 'back order'
     ).length
     
+    const preferenceMatches = currentPicklist.filter(item => 
+      item.isPreference === true
+    ).length
+    
     const totalCost = currentPicklist.reduce((sum, item) => {
       const price = parseFloat(item.totalPrice)
       return isNaN(price) ? sum : sum + price
@@ -280,6 +284,7 @@ function PicklistPreview({ results, onBack, onNavigate }) {
     return {
       totalItems: currentPicklist.length,
       itemsWithSuppliers,
+      preferenceMatches,
       totalCost
     }
   }
@@ -702,7 +707,7 @@ function PicklistPreview({ results, onBack, onNavigate }) {
             )}
             
             {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">{summary.totalItems}</div>
                 <div className="text-sm text-blue-700">Total Items</div>
@@ -710,6 +715,12 @@ function PicklistPreview({ results, onBack, onNavigate }) {
               <div className="bg-green-50 p-4 rounded-lg">
                 <div className="text-2xl font-bold text-green-600">{summary.itemsWithSuppliers}</div>
                 <div className="text-sm text-green-700">Items with Suppliers</div>
+              </div>
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-600 flex items-center gap-1">
+                  ⭐ {summary.preferenceMatches}
+                </div>
+                <div className="text-sm text-yellow-700">Preference Matches</div>
               </div>
               <div className="bg-purple-50 p-4 rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">${summary.totalCost.toFixed(2)}</div>
@@ -730,7 +741,7 @@ function PicklistPreview({ results, onBack, onNavigate }) {
                   <li>• Use checkboxes to select multiple rows and bulk match them to the same item</li>
                   <li>• Click the header checkbox to select/deselect all rows at once</li>
                   <li>• Use arrow keys, Enter, and Escape for keyboard navigation</li>
-                  <li>• Items with blue borders show learned preferences from your past selections</li>
+                  <li>• Items marked with ⭐ <span className="font-semibold text-purple-700">Preference</span> are automatically matched based on your past manual selections</li>
                   <li>• Supplier dropdown shows all available suppliers with their prices</li>
                   <li>• Numbers in blue badges indicate how many suppliers are available for that item</li>
                   <li>• When you export, the system remembers your manual matches for future uploads</li>
@@ -810,10 +821,10 @@ function PicklistPreview({ results, onBack, onNavigate }) {
 
           {/* Picklist Table */}
           <div className="overflow-x-auto overflow-y-visible mb-8">
-            <table className="w-full border-collapse bg-white">
+            <table className="w-full border-collapse bg-white table-fixed min-w-[1200px]">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="border border-gray-200 p-3 text-center font-semibold text-gray-700">
+                  <th className="border border-gray-200 p-2 text-center font-semibold text-gray-700 w-10">
                     <input
                       type="checkbox"
                       checked={selectedRows.size === currentPicklist.length && currentPicklist.length > 0}
@@ -821,13 +832,13 @@ function PicklistPreview({ results, onBack, onNavigate }) {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                   </th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">#</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Qty</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Original Item</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Matched Item</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Supplier</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Unit Price</th>
-                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Total</th>
+                  <th className="border border-gray-200 p-2 text-center font-semibold text-gray-700 w-12">#</th>
+                  <th className="border border-gray-200 p-2 text-center font-semibold text-gray-700 w-16">Qty</th>
+                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700 w-60">Original Item</th>
+                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700 w-80">Matched Item</th>
+                  <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700 w-32">Supplier</th>
+                  <th className="border border-gray-200 p-3 text-center font-semibold text-gray-700 w-20">Unit Price</th>
+                  <th className="border border-gray-200 p-3 text-center font-semibold text-gray-700 w-20">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -835,7 +846,7 @@ function PicklistPreview({ results, onBack, onNavigate }) {
                   <tr key={index} className={`hover:bg-gray-50 transition-colors ${
                     selectedRows.has(index) ? 'bg-blue-50 border-blue-200' : ''
                   }`}>
-                    <td className="border border-gray-200 p-2 text-center">
+                    <td className="border border-gray-200 p-2 text-center w-10">
                       <input
                         type="checkbox"
                         checked={selectedRows.has(index)}
@@ -843,25 +854,39 @@ function PicklistPreview({ results, onBack, onNavigate }) {
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
                     </td>
-                    <td className="border border-gray-200 p-2 text-center text-gray-600">
+                    <td className="border border-gray-200 p-2 text-center text-gray-600 w-12">
                       {index + 1}
                     </td>
-                    <td className="border border-gray-200">
+                    <td className="border border-gray-200 w-16">
                       {renderEditableCell(item, index, 'quantity', item.quantity)}
                     </td>
-                    <td className="border border-gray-200 max-w-md">
+                    <td className="border border-gray-200 w-60">
                       {renderEditableCell(item, index, 'originalItem', item.originalItem)}
                     </td>
-                    <td className="border border-gray-200 max-w-md">
-                      {renderEditableCell(item, index, 'matchedItem', item.matchedDescription)}
-                    </td>
                     <td className="border border-gray-200">
+                      <div className="space-y-1">
+                        <div className="min-w-0">
+                          {renderEditableCell(item, index, 'matchedItem', item.matchedDescription)}
+                        </div>
+                        {item.isPreference && (
+                          <div className="flex justify-start">
+                            <span 
+                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 whitespace-nowrap"
+                              title={`Matched by preference (used ${item.frequency || 1} time${(item.frequency || 1) === 1 ? '' : 's'} before)`}
+                            >
+                              ⭐ Preference
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="border border-gray-200 w-32">
                       {renderEditableCell(item, index, 'selectedSupplier', item.selectedSupplier)}
                     </td>
-                    <td className="border border-gray-200">
+                    <td className="border border-gray-200 w-20 text-center">
                       {renderEditableCell(item, index, 'unitPrice', item.unitPrice)}
                     </td>
-                    <td className="border border-gray-200">
+                    <td className="border border-gray-200 w-20 text-center">
                       {renderEditableCell(item, index, 'totalPrice', item.totalPrice)}
                     </td>
                   </tr>
