@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { devLog } from '../utils/logger';
+import apiClient from '../utils/apiClient';
 
 // Hook for handling picklist persistence to different backends
 export const usePicklistPersistence = (shareId = null) => {
@@ -8,19 +9,9 @@ export const usePicklistPersistence = (shareId = null) => {
   // Save to session storage (for non-shared lists)
   const saveToSession = useCallback(async (picklist) => {
     try {
-      const response = await fetch('/api/session/picklist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ picklist })
-      });
-
-      if (response.ok) {
-        devLog('✅ Saved picklist to session storage');
-        return { success: true };
-      } else {
-        console.error('❌ Failed to save picklist to session storage');
-        return { success: false, error: 'Session save failed' };
-      }
+      await apiClient.saveSessionPicklist(picklist);
+      devLog('✅ Saved picklist to session storage');
+      return { success: true };
     } catch (error) {
       console.error('❌ Session storage error:', error);
       return { success: false, error: error.message };
@@ -32,19 +23,9 @@ export const usePicklistPersistence = (shareId = null) => {
     if (!shareId) return { success: false, error: 'No share ID provided' };
 
     try {
-      const response = await fetch(`/api/shopping-list/share/${shareId}/picklist`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ picklist })
-      });
-
-      if (response.ok) {
-        devLog('✅ Saved picklist to database');
-        return { success: true };
-      } else {
-        console.error('❌ Failed to save picklist to database');
-        return { success: false, error: 'Database save failed' };
-      }
+      await apiClient.updateSharedListPicklist(shareId, picklist);
+      devLog('✅ Saved picklist to database');
+      return { success: true };
     } catch (error) {
       console.error('❌ Database save error:', error);
       return { success: false, error: error.message };
@@ -79,13 +60,10 @@ export const usePicklistPersistence = (shareId = null) => {
   // Load from session storage
   const loadFromSession = useCallback(async () => {
     try {
-      const response = await fetch('/api/session/picklist');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.picklist) {
-          devLog('✅ Loaded picklist from session storage:', data.picklist.length, 'items');
-          return { success: true, picklist: data.picklist };
-        }
+      const data = await apiClient.getSessionPicklist();
+      if (data.picklist) {
+        devLog('✅ Loaded picklist from session storage:', data.picklist.length, 'items');
+        return { success: true, picklist: data.picklist };
       }
       return { success: false, error: 'No session data found' };
     } catch (error) {
@@ -99,13 +77,10 @@ export const usePicklistPersistence = (shareId = null) => {
     if (!shareId) return { success: false, error: 'No share ID provided' };
 
     try {
-      const response = await fetch(`/api/shopping-list/share/${shareId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data && data.data.picklist) {
-          devLog('✅ Loaded picklist from database:', data.data.picklist.length, 'items');
-          return { success: true, picklist: data.data.picklist };
-        }
+      const data = await apiClient.getSharedList(shareId);
+      if (data && data.picklist) {
+        devLog('✅ Loaded picklist from database:', data.picklist.length, 'items');
+        return { success: true, picklist: data.picklist };
       }
       return { success: false, error: 'No database data found' };
     } catch (error) {
@@ -128,7 +103,7 @@ export const usePicklistPersistence = (shareId = null) => {
   // Clear storage
   const clearStorage = useCallback(async () => {
     try {
-      await fetch('/api/session/picklist', { method: 'DELETE' });
+      await apiClient.clearSessionPicklist();
       devLog('✅ Cleared session storage');
       return { success: true };
     } catch (error) {

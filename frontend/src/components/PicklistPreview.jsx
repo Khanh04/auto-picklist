@@ -3,6 +3,7 @@ import { Select, MenuItem, FormControl, TextField, Autocomplete, Chip } from '@m
 import Fuse from 'fuse.js'
 import { devLog } from '../utils/logger'
 import { usePicklistSync } from '../hooks/usePicklistSync'
+import apiClient from '../utils/apiClient'
 
 function PicklistPreview({ results, onBack, onNavigate }) {
   const [editingCell, setEditingCell] = useState(null)
@@ -85,43 +86,37 @@ function PicklistPreview({ results, onBack, onNavigate }) {
   const fetchDatabaseData = async () => {
     try {
       // Fetch suppliers
-      const suppliersResponse = await fetch('/api/suppliers')
-      if (suppliersResponse.ok) {
-        const suppliersData = await suppliersResponse.json()
-        const supplierNames = suppliersData.suppliers.map(s => s.name)
-        const allSuppliers = [...new Set([...availableSuppliers.filter(s => s !== 'back order'), ...supplierNames])].sort()
-        setAvailableSuppliers([...allSuppliers, 'back order'])
-      }
+      const suppliersData = await apiClient.getSuppliers()
+      const supplierNames = (suppliersData.suppliers || []).map(s => s.name)
+      const allSuppliers = [...new Set([...availableSuppliers.filter(s => s !== 'back order'), ...supplierNames])].sort()
+      setAvailableSuppliers([...allSuppliers, 'back order'])
 
       // Fetch available items for matching
-      const itemsResponse = await fetch('/api/items')
-      if (itemsResponse.ok) {
-        const itemsData = await itemsResponse.json()
-        const items = itemsData.items || []
-        devLog('PicklistPreview: Fetched items', items.length)
-        setAvailableItems(items)
-        
-        // Prepare options for matched item selection (only product descriptions)
-        const options = items.map(item => ({
-          value: item.id,
-          label: item.description, // Only show description, no supplier/price
-          item: item // Store full item data for easy access
-        }))
-        devLog('PicklistPreview: Select options prepared', options.length)
-        setSelectOptions(options)
-        
-        // Create Fuse instance for fuzzy matching (only product descriptions)
-        const fuseOptions = {
-          keys: [
-            { name: 'item.description', weight: 1.0 } // Only search descriptions
-          ],
-          threshold: 0.6, // 0.0 = perfect match, 1.0 = match anything
-          includeScore: true,
-          minMatchCharLength: 2
-        }
-        const fuse = new Fuse(options, fuseOptions)
-        setFuseInstance(fuse)
+      const itemsData = await apiClient.getItems()
+      const items = itemsData.items || []
+      devLog('PicklistPreview: Fetched items', items.length)
+      setAvailableItems(items)
+      
+      // Prepare options for matched item selection (only product descriptions)
+      const options = items.map(item => ({
+        value: item.id,
+        label: item.description, // Only show description, no supplier/price
+        item: item // Store full item data for easy access
+      }))
+      devLog('PicklistPreview: Select options prepared', options.length)
+      setSelectOptions(options)
+      
+      // Create Fuse instance for fuzzy matching (only product descriptions)
+      const fuseOptions = {
+        keys: [
+          { name: 'item.description', weight: 1.0 } // Only search descriptions
+        ],
+        threshold: 0.6, // 0.0 = perfect match, 1.0 = match anything
+        includeScore: true,
+        minMatchCharLength: 2
       }
+      const fuse = new Fuse(options, fuseOptions)
+      setFuseInstance(fuse)
     } catch (error) {
       console.error('Error fetching database data:', error)
     }
@@ -133,13 +128,10 @@ function PicklistPreview({ results, onBack, onNavigate }) {
     }
     
     try {
-      const response = await fetch(`/api/items/${productId}/suppliers`)
-      if (response.ok) {
-        const data = await response.json()
-        const suppliers = data.suppliers || []
-        setProductSuppliers(prev => ({ ...prev, [productId]: suppliers }))
-        return suppliers
-      }
+      const data = await apiClient.get(`/api/items/${productId}/suppliers`)
+      const suppliers = data.suppliers || []
+      setProductSuppliers(prev => ({ ...prev, [productId]: suppliers }))
+      return suppliers
     } catch (error) {
       console.error('Error fetching product suppliers:', error)
     }
@@ -672,34 +664,34 @@ function PicklistPreview({ results, onBack, onNavigate }) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div className="text-center">
                     <div className="text-xl font-bold text-purple-600">
-                      {results.multiCsvData.metadata.filesProcessed}
+                      {results?.multiCsvData?.metadata?.filesProcessed}
                     </div>
                     <div className="text-purple-700">Files Processed</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-blue-600">
-                      {results.multiCsvData.metadata.totalOriginalItems}
+                      {results?.multiCsvData?.metadata?.totalOriginalItems}
                     </div>
                     <div className="text-blue-700">Total Items</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-green-600">
-                      {results.multiCsvData.metadata.totalUniqueItems}
+                      {results?.multiCsvData?.metadata?.totalUniqueItems}
                     </div>
                     <div className="text-green-700">Unique Items</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-orange-600">
-                      {results.multiCsvData.analytics?.supplierAnalysis?.totalSuppliers || 0}
+                      {results?.multiCsvData?.analytics?.supplierAnalysis?.totalSuppliers || 0}
                     </div>
                     <div className="text-orange-700">Suppliers</div>
                   </div>
                 </div>
                 
-                {results.multiCsvData.files.length > 1 && (
+                {results?.multiCsvData?.files?.length > 1 && (
                   <div className="mt-3 pt-3 border-t border-purple-200">
                     <p className="text-xs text-purple-600 text-center">
-                      Files: {results.multiCsvData.files.map(f => f.filename).join(', ')}
+                      Files: {results?.multiCsvData?.files?.map(f => f.filename).join(', ')}
                     </p>
                   </div>
                 )}

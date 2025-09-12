@@ -1,9 +1,21 @@
 module.exports = {
   testEnvironment: 'jsdom',
-  roots: ['<rootDir>/src', '<rootDir>/frontend/src'],
+  roots: ['<rootDir>/src', '<rootDir>/frontend/src', '<rootDir>/tests'],
   testMatch: [
     '**/__tests__/**/*.(js|jsx|ts|tsx)',
     '**/*.(test|spec).(js|jsx|ts|tsx)'
+  ],
+  projects: [
+    {
+      displayName: 'backend',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/tests/**/*.test.js']
+    },
+    {
+      displayName: 'frontend',
+      testEnvironment: 'jsdom',
+      testMatch: ['<rootDir>/frontend/src/**/*.test.(js|jsx)']
+    }
   ],
   transform: {
     '^.+\\.(js|jsx)$': 'babel-jest',

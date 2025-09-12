@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
 import { devLog } from './utils/logger'
 import { PicklistProvider, usePicklist } from './contexts/PicklistContext'
+import apiClient from './utils/apiClient'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
@@ -35,31 +36,19 @@ function AppContent() {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('useDatabase', 'true')
-
-      const response = await fetch('/api/picklist/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
+      const result = await apiClient.uploadPicklist(file, true)
       devLog('Upload result:', result)
-
-      if (result.success) {
-        devLog('Picklist items:', result.picklist)
-        setResults(result)
-        // Clear database session when new file is uploaded
-        fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
-        navigate('/')
-      } else {
-        setError(result.error || 'Failed to process file')
-        navigate('/error')
-      }
+      devLog('Picklist items:', result.picklist)
+      
+      // Wrap result to maintain existing component expectations
+      setResults({ success: true, ...result })
+      
+      // Clear database session when new file is uploaded
+      apiClient.clearSessionPicklist().catch(console.warn)
+      navigate('/')
     } catch (err) {
       console.error('Upload error:', err)
-      setError('Network error. Please try again.')
+      setError(err.message || 'Failed to process file')
       navigate('/error')
     }
   }
@@ -69,49 +58,33 @@ function AppContent() {
     setError(null)
 
     try {
-      const formData = new FormData()
-      files.forEach((file, index) => {
-        formData.append('files', file)
-      })
-      formData.append('useDatabase', 'true')
-
       devLog(`Uploading ${files.length} CSV files for combined processing...`)
-
-      const response = await fetch('/api/multi-csv/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
+      const result = await apiClient.uploadMultipleCSV(files, true)
       devLog('Multi-CSV upload result:', result)
 
-      if (result.success) {
-        // Transform multi-CSV results to be compatible with existing UI
-        const transformedResult = {
-          success: true,
-          picklist: result.combinedPicklist,
-          summary: result.overallSummary,
-          validation: { isValid: true, errors: [], warnings: [] },
-          multiCsvData: {
-            files: result.files,
-            analytics: result.analytics,
-            metadata: result.metadata,
-            individualSummaries: result.individualSummaries
-          }
+      // Transform multi-CSV results to be compatible with existing UI
+      const transformedResult = {
+        success: true,
+        picklist: result.combinedPicklist,
+        summary: result.overallSummary,
+        validation: { isValid: true, errors: [], warnings: [] },
+        multiCsvData: {
+          files: result.files,
+          analytics: result.analytics,
+          metadata: result.metadata,
+          individualSummaries: result.individualSummaries
         }
-        
-        devLog('Combined picklist items:', result.combinedPicklist)
-        setResults(transformedResult)
-        // Clear database session when new file is uploaded
-        fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
-        navigate('/')
-      } else {
-        setError(result.error || 'Failed to process CSV files')
-        navigate('/error')
       }
+      
+      devLog('Combined picklist items:', result.combinedPicklist)
+      setResults(transformedResult)
+      
+      // Clear database session when new file is uploaded
+      apiClient.clearSessionPicklist().catch(console.warn)
+      navigate('/')
     } catch (err) {
       console.error('Multi-CSV upload error:', err)
-      setError('Network error. Please try again.')
+      setError(err.message || 'Failed to process CSV files')
       navigate('/error')
     }
   }
@@ -120,7 +93,7 @@ function AppContent() {
     setResults(null)
     setError(null)
     // Clear database session when resetting
-    fetch('/api/session/picklist', { method: 'DELETE' }).catch(console.warn)
+    apiClient.clearSessionPicklist().catch(console.warn)
     navigate('/')
   }
 
@@ -207,24 +180,8 @@ function AppContent() {
       // Create a shared shopping list and redirect to it
       const createSharedList = async () => {
         try {
-          const response = await fetch('/api/shopping-list/share', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              picklist: currentPicklist,
-              title: 'Shopping List'
-            })
-          })
-
-          const result = await response.json()
-          
-          if (result.success) {
-            navigate(`/shopping/${result.shareId}`)
-          } else {
-            console.error('Failed to create shared shopping list:', result.error)
-          }
+          const result = await apiClient.createSharedList(currentPicklist, 'Shopping List')
+          navigate(`/shopping/${result.shareId}`)
         } catch (error) {
           console.error('Error creating shared shopping list:', error)
         }

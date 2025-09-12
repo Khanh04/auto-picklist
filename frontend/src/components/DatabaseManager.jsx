@@ -35,7 +35,7 @@ const DatabaseManager = ({ onBack }) => {
             const response = await fetch('/api/suppliers');
             if (response.ok) {
                 const data = await response.json();
-                setSuppliers(data.suppliers || []);
+                setSuppliers(data.data?.suppliers || data.suppliers || []);
             }
         } catch (err) {
             console.error('Error fetching suppliers:', err);
@@ -47,7 +47,7 @@ const DatabaseManager = ({ onBack }) => {
             const response = await fetch('/api/preferences');
             if (response.ok) {
                 const data = await response.json();
-                setPreferences(data.preferences || []);
+                setPreferences(data.data?.preferences || data.preferences || []);
             }
         } catch (err) {
             console.error('Error fetching preferences:', err);
@@ -92,7 +92,7 @@ const DatabaseManager = ({ onBack }) => {
             const response = await fetch(`/api/suppliers/${supplier.id}/items`);
             if (response.ok) {
                 const data = await response.json();
-                setSupplierItems(data.items || []);
+                setSupplierItems(data.data?.items || data.items || []);
             } else {
                 setError('Failed to fetch supplier items');
             }
