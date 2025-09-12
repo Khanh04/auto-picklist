@@ -8,12 +8,21 @@ const fs = require('fs').promises;
 const { asyncHandler } = require('../middleware/errorHandler');
 const { pool } = require('../database/config');
 const { ExcelImportService } = require('../services/ExcelImportService');
+const { 
+    secureValidateFileUpload, 
+    preventRequestBombing 
+} = require('../middleware/secureValidation');
+const { secureQuery } = require('../utils/secureDb');
 
-// Configure multer for file uploads
+// Configure multer for file uploads with enhanced security
 const upload = multer({
     dest: 'uploads/',
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+        files: 1, // Only allow single file upload
+        fieldSize: 1024 * 1024, // 1MB field size limit
+        fieldNameSize: 100, // Limit field name size
+        headerPairs: 20 // Limit header pairs
     },
     fileFilter: (req, file, cb) => {
         const allowedMimes = [
@@ -33,7 +42,21 @@ const upload = multer({
  * POST /api/database/import-excel
  * Import suppliers and items from Excel file using centralized service
  */
-router.post('/import-excel', upload.single('file'), asyncHandler(async (req, res) => {
+router.post('/import-excel', 
+    preventRequestBombing({ maxBodySize: 15 * 1024 * 1024 }), // 15MB for file uploads
+    upload.single('file'), 
+    secureValidateFileUpload({
+        required: true,
+        allowedTypes: [
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+            'text/csv'
+        ],
+        maxSize: 10 * 1024 * 1024,
+        allowedExtensions: ['xlsx', 'xls', 'csv'],
+        checkMagicNumbers: false // Disable for Excel files as they're complex
+    }),
+    asyncHandler(async (req, res) => {
     if (!req.file) {
         return res.status(400).json({
             success: false,

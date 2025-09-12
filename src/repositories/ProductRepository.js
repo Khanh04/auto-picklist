@@ -1,4 +1,5 @@
 const BaseRepository = require('./BaseRepository');
+const { secureQuery, safeSelect } = require('../utils/secureDb');
 
 class ProductRepository extends BaseRepository {
     /**

@@ -8,6 +8,7 @@ const http = require('http');
 const config = require('./src/config');
 const { globalErrorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
 const { rateLimit } = require('./src/middleware/validation');
+const { preventRequestBombing } = require('./src/middleware/secureValidation');
 
 // Import route modules
 const itemsRoutes = require('./src/routes/items');
@@ -64,9 +65,24 @@ if (config.features.enableHealthCheck) {
     });
 }
 
-// Global middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Global middleware with security enhancements
+app.use(express.json({ 
+    limit: '10mb',
+    strict: true, // Only parse arrays and objects
+    type: 'application/json'
+}));
+app.use(express.urlencoded({ 
+    extended: true, 
+    limit: '10mb',
+    parameterLimit: 1000 // Limit URL-encoded parameters
+}));
+
+// Request bombing prevention
+app.use(preventRequestBombing({
+    maxBodySize: 10 * 1024 * 1024, // 10MB
+    maxParameters: 1000,
+    maxDepth: 10
+}));
 
 // Rate limiting
 if (config.isProduction()) {

@@ -13,7 +13,11 @@ const dbConfig = {
     connectionTimeoutMillis: config.database.connectionTimeoutMs,
     acquireTimeoutMillis: config.database.acquireTimeoutMillis,
     // Handle Railway SSL requirements
-    ssl: config.isProduction() ? false : false, // Railway internal network doesn't need SSL
+    ssl: process.env.RAILWAY_ENVIRONMENT ? 
+        // Railway provides secure internal network, no SSL needed
+        false : 
+        // For external PostgreSQL connections in production, use SSL
+        config.isProduction() ? { rejectUnauthorized: false } : false
 };
 
 // Create connection pool

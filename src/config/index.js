@@ -152,7 +152,7 @@ function validate() {
 
     // Validate session secret in production
     if (isProduction() && get('security.sessionSecret') === 'auto-picklist-secret-key') {
-        console.warn('WARNING: Using default session secret in production environment');
+        throw new Error('SECURITY: Default session secret not allowed in production. Please set SESSION_SECRET environment variable.');
     }
 }
 
