@@ -58,7 +58,7 @@ async function setupDatabase() {
         await dbPool.query(`
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
-                description TEXT NOT NULL,
+                description TEXT NOT NULL UNIQUE,
                 normalized_description TEXT, -- For faster searching
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

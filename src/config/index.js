@@ -21,9 +21,10 @@ const config = {
         name: process.env.PGDATABASE || process.env.DB_NAME || 'autopicklist',
         user: process.env.PGUSER || process.env.DB_USER || 'postgres',
         password: process.env.PGPASSWORD || process.env.DB_PASSWORD || '',
-        maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS) || 20,
-        idleTimeoutMs: parseInt(process.env.DB_IDLE_TIMEOUT) || 30000,
-        connectionTimeoutMs: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 2000
+        maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS) || 5, // Reduced for Railway limits
+        idleTimeoutMs: parseInt(process.env.DB_IDLE_TIMEOUT) || 10000, // Shorter idle timeout
+        connectionTimeoutMs: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 5000,
+        acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || 10000
     },
 
     // File upload configuration

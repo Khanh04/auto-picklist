@@ -7,6 +7,7 @@ const fs = require('fs').promises;
 
 const { asyncHandler } = require('../middleware/errorHandler');
 const { pool } = require('../database/config');
+const { ExcelImportService } = require('../services/ExcelImportService');
 
 // Configure multer for file uploads
 const upload = multer({
@@ -29,20 +30,8 @@ const upload = multer({
 });
 
 /**
- * Normalize item names for better matching (from existing script)
- */
-function normalizeItemName(itemName) {
-    return itemName
-        .replace(/\[.*?\]/g, '')  // Remove bracketed text
-        .replace(/\*.*?\*/g, '')  // Remove text between asterisks
-        .replace(/\s+/g, ' ')     // Normalize whitespace
-        .trim()
-        .toLowerCase();
-}
-
-/**
  * POST /api/database/import-excel
- * Import suppliers and items from Excel file using existing import logic
+ * Import suppliers and items from Excel file using centralized service
  */
 router.post('/import-excel', upload.single('file'), asyncHandler(async (req, res) => {
     if (!req.file) {
@@ -53,158 +42,19 @@ router.post('/import-excel', upload.single('file'), asyncHandler(async (req, res
     }
 
     const filePath = req.file.path;
-    const client = await pool.connect();
     
     try {
         console.log('📊 Starting Excel data import from web upload...');
         
-        // Read Excel file
-        console.log(`📖 Reading uploaded file: ${req.file.originalname}...`);
-        const workbook = XLSX.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        if (!sheetName) {
-            throw new Error('Excel file contains no worksheets');
-        }
-        
-        const worksheet = workbook.Sheets[sheetName];
-        const rawData = XLSX.utils.sheet_to_json(worksheet);
-        
-        console.log(`📋 Found ${rawData.length} rows in Excel file`);
-
-        if (rawData.length === 0) {
-            throw new Error('Excel file contains no data rows');
-        }
-
-        // Get all column names by examining all rows (from existing script)
-        const allColumns = new Set();
-        rawData.forEach(row => {
-            Object.keys(row).forEach(key => allColumns.add(key));
-        });
-        const columns = Array.from(allColumns);
-        
-        // Find item column (from existing script)
-        const itemCol = columns.find(col => 
-            ['item', 'product', 'name', 'description'].some(keyword => 
-                col.toLowerCase().includes(keyword)
-            )
-        );
-        
-        if (!itemCol) {
-            throw new Error('Could not find item/product description column in Excel file. Please ensure you have a column with "item", "product", "name", or "description" in the header.');
-        }
-        
-        // All other columns are potential supplier columns (from existing script)
-        const supplierCols = columns.filter(col => col !== itemCol);
-        console.log(`🏪 Found ${supplierCols.length} supplier columns`);
-
-        if (supplierCols.length === 0) {
-            throw new Error('No supplier columns found. Excel file should have supplier names as column headers.');
-        }
-
-        // Start transaction
-        await client.query('BEGIN');
-        
-        console.log('🧹 Clearing existing data...');
-        await client.query('DELETE FROM supplier_prices');
-        await client.query('DELETE FROM products');
-        await client.query('DELETE FROM suppliers');
-        
-        // Reset sequences (from existing script)
-        await client.query('ALTER SEQUENCE suppliers_id_seq RESTART WITH 1');
-        await client.query('ALTER SEQUENCE products_id_seq RESTART WITH 1');
-        await client.query('ALTER SEQUENCE supplier_prices_id_seq RESTART WITH 1');
-
-        // Insert suppliers (from existing script)
-        console.log('🏪 Inserting suppliers...');
-        const supplierIds = {};
-        for (const supplierName of supplierCols) {
-            const result = await client.query(
-                'INSERT INTO suppliers (name) VALUES ($1) RETURNING id',
-                [supplierName]
-            );
-            supplierIds[supplierName] = result.rows[0].id;
-        }
-        console.log(`✅ Inserted ${Object.keys(supplierIds).length} suppliers`);
-
-        // Process products and prices (from existing script)
-        console.log('📦 Processing products and prices...');
-        let productCount = 0;
-        let priceCount = 0;
-        let errorCount = 0;
-        const processedProducts = new Set(); // To avoid duplicates
-        const errors = [];
-        
-        for (const [index, row] of rawData.entries()) {
-            try {
-                const description = String(row[itemCol] || '').trim();
-                
-                if (!description || description.length < 3) {
-                    continue; // Skip empty or too short descriptions
-                }
-                
-                // Skip if we've already processed this exact description
-                if (processedProducts.has(description)) {
-                    continue;
-                }
-                processedProducts.add(description);
-                
-                const normalizedDescription = normalizeItemName(description);
-                
-                // Insert product with normalized description
-                const productResult = await client.query(
-                    'INSERT INTO products (description, normalized_description) VALUES ($1, $2) RETURNING id',
-                    [description, normalizedDescription]
-                );
-                const productId = productResult.rows[0].id;
-                productCount++;
-                
-                // Insert prices for this product (from existing script)
-                for (const supplierCol of supplierCols) {
-                    const priceValue = row[supplierCol];
-                    
-                    if (priceValue !== undefined && priceValue !== null && priceValue !== '') {
-                        // Parse price value (from existing script)
-                        const priceStr = String(priceValue).replace(/[@$,\s]/g, '');
-                        const price = parseFloat(priceStr);
-                        
-                        if (!isNaN(price) && price > 0) {
-                            await client.query(
-                                'INSERT INTO supplier_prices (product_id, supplier_id, price) VALUES ($1, $2, $3)',
-                                [productId, supplierIds[supplierCol], price]
-                            );
-                            priceCount++;
-                        }
-                    }
-                }
-                
-                // Progress indicator
-                if (productCount % 100 === 0) {
-                    console.log(`   📦 Processed ${productCount} products, ${priceCount} prices...`);
-                }
-                
-            } catch (rowError) {
-                errorCount++;
-                errors.push({
-                    row: index + 2, // +2 for 1-indexed and header row
-                    message: rowError.message,
-                    description: row[itemCol] || 'Unknown item'
-                });
-                
-                // Don't fail the entire import for individual row errors
-                console.warn(`⚠️  Row ${index + 2} error: ${rowError.message}`);
+        const importService = new ExcelImportService();
+        const result = await importService.importExcelFile(filePath, {
+            preserveData: true, // Use additive import by default for web uploads
+            progressCallback: (progress) => {
+                // Could emit WebSocket events for real-time progress here
+                console.log(`Progress: ${progress.processedRows}/${progress.totalRows}`);
             }
-        }
+        });
         
-        // Commit transaction
-        await client.query('COMMIT');
-        
-        console.log('✅ Import completed successfully!');
-        console.log(`📊 Import Summary:`);
-        console.log(`   🏪 Suppliers: ${Object.keys(supplierIds).length}`);
-        console.log(`   📦 Products: ${productCount}`);
-        console.log(`   💰 Price entries: ${priceCount}`);
-        console.log(`   ❌ Errors: ${errorCount}`);
-
         // Clean up uploaded file
         try {
             await fs.unlink(filePath);
@@ -212,24 +62,27 @@ router.post('/import-excel', upload.single('file'), asyncHandler(async (req, res
             console.error('Failed to delete uploaded file:', unlinkError);
         }
 
-        // Return success response
+        // Return success response with adjusted format for existing frontend
         res.json({
             success: true,
             message: 'Excel file imported successfully',
             summary: {
-                totalRows: rawData.length,
-                suppliersAdded: Object.keys(supplierIds).length,
-                itemsAdded: productCount,
-                pricesAdded: priceCount,
-                errors: errorCount
+                totalRows: result.summary.totalRows,
+                suppliersAdded: result.summary.suppliers,
+                itemsAdded: result.summary.totalProducts,
+                pricesAdded: result.summary.totalPrices,
+                errors: result.summary.errors,
+                // Additional info for new additive approach
+                newProducts: result.summary.newProducts,
+                updatedProducts: result.summary.updatedProducts,
+                newPrices: result.summary.newPrices,
+                updatedPrices: result.summary.updatedPrices
             },
-            errors: errors.slice(0, 50), // Limit errors to first 50 for UI
-            warnings: errors.length > 50 ? [`... and ${errors.length - 50} more errors`] : []
+            errors: result.errors,
+            warnings: result.warnings
         });
         
     } catch (error) {
-        await client.query('ROLLBACK');
-        
         // Clean up uploaded file on error
         try {
             await fs.unlink(filePath);
@@ -242,8 +95,6 @@ router.post('/import-excel', upload.single('file'), asyncHandler(async (req, res
             success: false,
             error: error.message || 'Failed to import Excel file'
         });
-    } finally {
-        client.release();
     }
 }));
 

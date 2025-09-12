@@ -12,6 +12,10 @@ const getRailwayConfig = () => {
             connectionString: databaseUrl,
             ssl: false, // Railway internal network doesn't need SSL
             connectionTimeoutMillis: 10000,
+            max: 3, // Reduced connection pool for Railway limits
+            min: 0,
+            idleTimeoutMillis: 5000,
+            acquireTimeoutMillis: 10000,
         };
     } else {
         return {
@@ -22,11 +26,37 @@ const getRailwayConfig = () => {
             port: process.env.PGPORT || process.env.DB_PORT || 5432,
             ssl: false, // Railway internal network doesn't need SSL
             connectionTimeoutMillis: 10000,
+            max: 3, // Reduced connection pool for Railway limits
+            min: 0,
+            idleTimeoutMillis: 5000,
+            acquireTimeoutMillis: 10000,
         };
     }
 };
 
 const railwayPool = new Pool(getRailwayConfig());
+
+// Add connection cleanup
+railwayPool.on('error', (err) => {
+    console.error('Railway pool error:', err.message);
+});
+
+// Retry utility function
+async function withRetry(fn, maxRetries = 3, delay = 2000) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            console.log(`Attempt ${i + 1} failed:`, error.message);
+            if (i === maxRetries - 1) {
+                throw error;
+            }
+            console.log(`Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 1.5; // Exponential backoff
+        }
+    }
+}
 
 // Local PostgreSQL connection (for data export)
 const localPool = new Pool({
@@ -39,11 +69,13 @@ const localPool = new Pool({
 
 async function checkDatabaseExists() {
     try {
-        const result = await railwayPool.query('SELECT NOW()');
+        const result = await withRetry(async () => {
+            return await railwayPool.query('SELECT NOW()');
+        });
         console.log('✅ Connected to Railway PostgreSQL database');
         return true;
     } catch (error) {
-        console.error('❌ Failed to connect to Railway database:', error.message);
+        console.error('❌ Failed to connect to Railway database after retries:', error.message);
         return false;
     }
 }
