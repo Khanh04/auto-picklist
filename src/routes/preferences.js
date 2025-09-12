@@ -3,7 +3,8 @@ const router = express.Router();
 
 const PreferenceRepository = require('../repositories/PreferenceRepository');
 const PicklistService = require('../services/PicklistService');
-const { asyncHandler } = require('../middleware/errorHandler');
+const { enhancedAsyncHandler, createNotFoundError } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody, validateParams } = require('../middleware/validation');
 
 const preferenceRepository = new PreferenceRepository();
@@ -13,12 +14,12 @@ const picklistService = new PicklistService();
  * GET /api/preferences
  * Get all user preferences
  */
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', enhancedAsyncHandler(async (req, res) => {
     const preferences = await preferenceRepository.getAll();
     
-    res.json({
-        success: true,
-        preferences
+    sendSuccessResponse(req, res, { preferences }, {
+        count: preferences.length,
+        message: 'Preferences retrieved successfully'
     });
 }));
 
@@ -26,14 +27,13 @@ router.get('/', asyncHandler(async (req, res) => {
  * GET /api/preferences/:originalItem
  * Get preference for a specific original item
  */
-router.get('/:originalItem', asyncHandler(async (req, res) => {
+router.get('/:originalItem', enhancedAsyncHandler(async (req, res) => {
     const { originalItem } = req.params;
     
     const preference = await preferenceRepository.getByOriginalItem(originalItem);
     
     if (preference) {
-        res.json({
-            success: true,
+        sendSuccessResponse(req, res, {
             preference: {
                 productId: preference.matched_product_id,
                 description: preference.description,
@@ -41,8 +41,7 @@ router.get('/:originalItem', asyncHandler(async (req, res) => {
             }
         });
     } else {
-        res.json({
-            success: false,
+        sendSuccessResponse(req, res, { preference: null }, {
             message: 'No preference found'
         });
     }
@@ -74,15 +73,13 @@ router.post('/',
             }
         }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { preferences } = req.body;
         
         const storedPreferences = await picklistService.storePreferences(preferences);
         
-        res.json({
-            success: true,
-            message: `Stored ${storedPreferences.length} matching preferences`,
-            preferences: storedPreferences
+        sendSuccessResponse(req, res, { preferences: storedPreferences }, {
+            message: `Stored ${storedPreferences.length} matching preferences`
         });
     })
 );
@@ -93,20 +90,16 @@ router.post('/',
  */
 router.delete('/:preferenceId',
     validateParams({ preferenceId: { type: 'id' } }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { preferenceId } = req.params;
         
         const deleted = await preferenceRepository.deleteById(preferenceId);
         
         if (!deleted) {
-            return res.status(404).json({
-                success: false,
-                error: 'Preference not found'
-            });
+            throw createNotFoundError('Preference', preferenceId);
         }
 
-        res.json({
-            success: true,
+        sendSuccessResponse(req, res, {}, {
             message: 'Preference deleted successfully'
         });
     })
@@ -135,7 +128,7 @@ router.post('/batch-delete',
             }
         }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { preferenceIds } = req.body;
         
         let deletedCount = 0;
@@ -144,11 +137,11 @@ router.post('/batch-delete',
             if (deleted) deletedCount++;
         }
         
-        res.json({
-            success: true,
-            message: `Deleted ${deletedCount} preferences`,
+        sendSuccessResponse(req, res, { 
             deletedCount,
             requestedCount: preferenceIds.length
+        }, {
+            message: `Deleted ${deletedCount} preferences`
         });
     })
 );

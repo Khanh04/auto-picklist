@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 
 const MultiCsvService = require('../services/MultiCsvService');
-const { asyncHandler } = require('../middleware/errorHandler');
+const { enhancedAsyncHandler, createValidationError } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateFileUpload } = require('../middleware/validation');
 
 const multiCsvService = new MultiCsvService();
@@ -49,22 +50,16 @@ const upload = multer({
  */
 router.post('/upload',
     upload.array('files', 10), // Accept up to 10 files with field name 'files'
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const files = req.files;
         const useDatabase = req.body.useDatabase !== 'false'; // Default to true
 
         if (!files || files.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'No CSV files uploaded'
-            });
+            throw createValidationError(['files'], 'No CSV files uploaded');
         }
 
         if (files.length > 10) {
-            return res.status(400).json({
-                success: false,
-                error: 'Maximum 10 CSV files allowed at once'
-            });
+            throw createValidationError(['files'], 'Maximum 10 CSV files allowed at once');
         }
 
         console.log(`Processing ${files.length} CSV files...`);
@@ -82,11 +77,11 @@ router.post('/upload',
                 }
             });
 
-            res.json({
-                success: true,
-                message: `Successfully processed ${results.metadata.filesProcessed} CSV files`,
+            sendSuccessResponse(req, res, {
                 ...results,
                 timestamp: new Date().toISOString()
+            }, {
+                message: `Successfully processed ${results.metadata.filesProcessed} CSV files`
             });
 
         } catch (error) {
@@ -101,10 +96,7 @@ router.post('/upload',
                 }
             });
 
-            res.status(500).json({
-                success: false,
-                error: 'Failed to process CSV files: ' + error.message
-            });
+            throw error; // Re-throw to be handled by enhanced error handler
         }
     })
 );
@@ -114,49 +106,37 @@ router.post('/upload',
  * Export combined results from multiple CSV processing
  */
 router.post('/export',
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { results, format = 'csv' } = req.body;
 
         if (!results || !results.combinedPicklist) {
-            return res.status(400).json({
-                success: false,
-                error: 'No processing results provided'
-            });
+            throw createValidationError(['results'], 'No processing results provided');
         }
 
-        try {
-            const exportedData = multiCsvService.exportCombinedResults(results, format);
-            
-            // Set appropriate headers based on format
-            let contentType, filename;
-            
-            switch (format.toLowerCase()) {
-                case 'json':
-                    contentType = 'application/json';
-                    filename = `multi-csv-results-${Date.now()}.json`;
-                    break;
-                case 'summary':
-                    contentType = 'text/plain';
-                    filename = `multi-csv-summary-${Date.now()}.txt`;
-                    break;
-                case 'csv':
-                default:
-                    contentType = 'text/csv';
-                    filename = `multi-csv-combined-${Date.now()}.csv`;
-                    break;
-            }
-            
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(exportedData);
-
-        } catch (error) {
-            console.error('Error exporting multi-CSV results:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to export results: ' + error.message
-            });
+        const exportedData = multiCsvService.exportCombinedResults(results, format);
+        
+        // Set appropriate headers based on format
+        let contentType, filename;
+        
+        switch (format.toLowerCase()) {
+            case 'json':
+                contentType = 'application/json';
+                filename = `multi-csv-results-${Date.now()}.json`;
+                break;
+            case 'summary':
+                contentType = 'text/plain';
+                filename = `multi-csv-summary-${Date.now()}.txt`;
+                break;
+            case 'csv':
+            default:
+                contentType = 'text/csv';
+                filename = `multi-csv-combined-${Date.now()}.csv`;
+                break;
         }
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(exportedData);
     })
 );
 
@@ -166,19 +146,15 @@ router.post('/export',
  */
 router.post('/analyze',
     upload.array('files', 10),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const files = req.files;
 
         if (!files || files.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'No CSV files uploaded'
-            });
+            throw createValidationError(['files'], 'No CSV files uploaded');
         }
 
         try {
             const analysis = {
-                success: true,
                 files: [],
                 totalItems: 0,
                 estimatedProcessingTime: 0
@@ -222,7 +198,7 @@ router.post('/analyze',
                 }
             });
 
-            res.json(analysis);
+            sendSuccessResponse(req, res, analysis);
 
         } catch (error) {
             console.error('Error analyzing CSV files:', error);
@@ -236,10 +212,7 @@ router.post('/analyze',
                 }
             });
 
-            res.status(500).json({
-                success: false,
-                error: 'Failed to analyze CSV files: ' + error.message
-            });
+            throw error; // Re-throw to be handled by enhanced error handler
         }
     })
 );
@@ -248,7 +221,7 @@ router.post('/analyze',
  * GET /api/multi-csv/templates
  * Get information about supported CSV formats
  */
-router.get('/templates', asyncHandler(async (req, res) => {
+router.get('/templates', enhancedAsyncHandler(async (req, res) => {
     const templates = [
         {
             id: 'ebay',
@@ -276,8 +249,7 @@ router.get('/templates', asyncHandler(async (req, res) => {
         }
     ];
 
-    res.json({
-        success: true,
+    sendSuccessResponse(req, res, {
         templates,
         notes: [
             'Column names are case-insensitive and flexible',

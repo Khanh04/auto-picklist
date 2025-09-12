@@ -9,6 +9,8 @@ const config = require('./src/config');
 const { globalErrorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
 const { rateLimit } = require('./src/middleware/validation');
 const { preventRequestBombing } = require('./src/middleware/secureValidation');
+const { requestContext, requestLogger } = require('./src/middleware/requestContext');
+const { enhancedGlobalErrorHandler, enhancedNotFoundHandler } = require('./src/middleware/enhancedErrorHandler');
 
 // Import route modules
 const itemsRoutes = require('./src/routes/items');
@@ -77,6 +79,9 @@ app.use(express.urlencoded({
     parameterLimit: 1000 // Limit URL-encoded parameters
 }));
 
+// Request context tracking (must be early in middleware chain)
+app.use(requestContext);
+
 // Request bombing prevention
 app.use(preventRequestBombing({
     maxBodySize: 10 * 1024 * 1024, // 10MB
@@ -120,13 +125,8 @@ app.use((req, res, next) => {
     next();
 });
 
-// Request logging middleware
-if (config.isDevelopment()) {
-    app.use((req, res, next) => {
-        console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-        next();
-    });
-}
+// Enhanced request logging middleware
+app.use(requestLogger);
 
 // API Routes
 app.use('/api/items', itemsRoutes);
@@ -292,8 +292,8 @@ app.get('*', (req, res) => {
 });
 
 // Error handling middleware (must be last)
-app.use(notFoundHandler);
-app.use(globalErrorHandler);
+app.use(enhancedNotFoundHandler);
+app.use(enhancedGlobalErrorHandler);
 
 // Create HTTP server
 const server = http.createServer(app);

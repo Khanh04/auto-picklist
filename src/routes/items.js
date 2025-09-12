@@ -6,6 +6,9 @@ const SupplierRepository = require('../repositories/SupplierRepository');
 const MatchingService = require('../services/MatchingService');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateBody, validateParams } = require('../middleware/validation');
+const { enhancedAsyncHandler, createValidationError, createNotFoundError } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse, sendErrorResponse } = require('../utils/errorResponse');
+const { ERROR_TYPES } = require('../utils/errorTypes');
 
 const productRepository = new ProductRepository();
 const supplierRepository = new SupplierRepository();
@@ -15,12 +18,12 @@ const matchingService = new MatchingService();
  * GET /api/items
  * Get all items with best prices
  */
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', enhancedAsyncHandler(async (req, res) => {
     const items = await productRepository.getAllWithBestPrices();
     
-    res.json({
-        success: true,
-        items
+    sendSuccessResponse(req, res, { items }, {
+        count: items.length,
+        message: 'Items retrieved successfully'
     });
 }));
 
@@ -91,14 +94,17 @@ router.post('/match',
     validateBody({
         description: { required: true, type: 'string', minLength: 2, maxLength: 500 }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { description } = req.body;
+        
+        if (!description?.trim()) {
+            throw createValidationError(['description'], 'Description cannot be empty');
+        }
         
         const result = await matchingService.findBestSupplier(description.trim());
         
         if (result.supplier && result.price) {
-            res.json({
-                success: true,
+            sendSuccessResponse(req, res, {
                 match: {
                     supplier: result.supplier,
                     price: result.price,

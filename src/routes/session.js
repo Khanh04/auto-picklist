@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { asyncHandler } = require('../middleware/errorHandler');
+const { enhancedAsyncHandler } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody } = require('../middleware/validation');
 
 // Simple in-memory storage for current session's picklist
@@ -24,7 +25,7 @@ router.post('/picklist',
             }
         }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { picklist } = req.body;
         
         // Store the picklist in memory
@@ -32,10 +33,10 @@ router.post('/picklist',
         
         console.log(`Saved session picklist with ${picklist.length} items`);
         
-        res.json({
-            success: true,
-            message: `Saved picklist with ${picklist.length} items`,
+        sendSuccessResponse(req, res, {
             itemCount: picklist.length
+        }, {
+            message: `Saved picklist with ${picklist.length} items`
         });
     })
 );
@@ -44,16 +45,16 @@ router.post('/picklist',
  * GET /api/session/picklist
  * Get the current session's picklist
  */
-router.get('/picklist', asyncHandler(async (req, res) => {
+router.get('/picklist', enhancedAsyncHandler(async (req, res) => {
     if (currentSessionPicklist) {
-        res.json({
-            success: true,
+        sendSuccessResponse(req, res, {
             picklist: currentSessionPicklist,
             itemCount: currentSessionPicklist.length
         });
     } else {
-        res.json({
-            success: false,
+        sendSuccessResponse(req, res, {
+            picklist: null
+        }, {
             message: 'No saved picklist found'
         });
     }
@@ -63,11 +64,10 @@ router.get('/picklist', asyncHandler(async (req, res) => {
  * DELETE /api/session/picklist
  * Clear the current session's picklist
  */
-router.delete('/picklist', asyncHandler(async (req, res) => {
+router.delete('/picklist', enhancedAsyncHandler(async (req, res) => {
     currentSessionPicklist = null;
     
-    res.json({
-        success: true,
+    sendSuccessResponse(req, res, {}, {
         message: 'Session picklist cleared'
     });
 }));

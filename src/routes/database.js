@@ -5,14 +5,14 @@ const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs').promises;
 
-const { asyncHandler } = require('../middleware/errorHandler');
+const { enhancedAsyncHandler, createValidationError, createDatabaseError } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse } = require('../utils/errorResponse');
 const { pool } = require('../database/config');
 const { ExcelImportService } = require('../services/ExcelImportService');
 const { 
     secureValidateFileUpload, 
     preventRequestBombing 
 } = require('../middleware/secureValidation');
-const { secureQuery } = require('../utils/secureDb');
 
 // Configure multer for file uploads with enhanced security
 const upload = multer({
@@ -56,12 +56,9 @@ router.post('/import-excel',
         allowedExtensions: ['xlsx', 'xls', 'csv'],
         checkMagicNumbers: false // Disable for Excel files as they're complex
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
     if (!req.file) {
-        return res.status(400).json({
-            success: false,
-            error: 'No file uploaded'
-        });
+        throw createValidationError(['file'], 'No file uploaded');
     }
 
     const filePath = req.file.path;
@@ -85,10 +82,7 @@ router.post('/import-excel',
             console.error('Failed to delete uploaded file:', unlinkError);
         }
 
-        // Return success response with adjusted format for existing frontend
-        res.json({
-            success: true,
-            message: 'Excel file imported successfully',
+        sendSuccessResponse(req, res, {
             summary: {
                 totalRows: result.summary.totalRows,
                 suppliersAdded: result.summary.suppliers,
@@ -103,6 +97,8 @@ router.post('/import-excel',
             },
             errors: result.errors,
             warnings: result.warnings
+        }, {
+            message: 'Excel file imported successfully'
         });
         
     } catch (error) {
@@ -113,11 +109,7 @@ router.post('/import-excel',
             console.error('Failed to delete uploaded file:', unlinkError);
         }
         
-        console.error('Excel import error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to import Excel file'
-        });
+        throw createDatabaseError(error, 'import Excel file');
     }
 }));
 
@@ -125,7 +117,7 @@ router.post('/import-excel',
  * GET /api/database/export-excel
  * Export database data as Excel file
  */
-router.get('/export-excel', asyncHandler(async (req, res) => {
+router.get('/export-excel', enhancedAsyncHandler(async (req, res) => {
     const client = await pool.connect();
     
     try {
@@ -136,10 +128,7 @@ router.get('/export-excel', asyncHandler(async (req, res) => {
         const suppliers = suppliersResult.rows;
         
         if (suppliers.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'No suppliers found to export'
-            });
+            throw createValidationError(['suppliers'], 'No suppliers found to export');
         }
         
         // Get all products with their prices
@@ -226,11 +215,7 @@ router.get('/export-excel', asyncHandler(async (req, res) => {
         res.end(excelBuffer);
         
     } catch (error) {
-        console.error('Excel export error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to export database'
-        });
+        throw createDatabaseError(error, 'export database to Excel');
     } finally {
         client.release();
     }

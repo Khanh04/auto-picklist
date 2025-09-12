@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 
 const SupplierRepository = require('../repositories/SupplierRepository');
-const { asyncHandler } = require('../middleware/errorHandler');
+const { enhancedAsyncHandler, createValidationError, createNotFoundError } = require('../middleware/enhancedErrorHandler');
+const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody, validateParams } = require('../middleware/validation');
 
 const supplierRepository = new SupplierRepository();
@@ -11,12 +12,12 @@ const supplierRepository = new SupplierRepository();
  * GET /api/suppliers
  * Get all suppliers with product counts
  */
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', enhancedAsyncHandler(async (req, res) => {
     const suppliers = await supplierRepository.getAllWithProductCounts();
     
-    res.json({
-        success: true,
-        suppliers
+    sendSuccessResponse(req, res, { suppliers }, {
+        count: suppliers.length,
+        message: 'Suppliers retrieved successfully'
     });
 }));
 
@@ -28,25 +29,20 @@ router.post('/',
     validateBody({
         name: { required: true, type: 'string', minLength: 2, maxLength: 100 }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { name } = req.body;
 
         // Check if supplier already exists
         const existingSupplier = await supplierRepository.findByName(name);
         if (existingSupplier) {
-            return res.status(409).json({
-                success: false,
-                error: 'Supplier already exists'
-            });
+            throw createValidationError(['name'], `Supplier "${name}" already exists`);
         }
 
         const supplier = await supplierRepository.create(name);
 
-        res.status(201).json({
-            success: true,
-            message: `Supplier "${name}" created successfully`,
-            supplier
-        });
+        sendSuccessResponse(req, res, { supplier }, {
+            message: `Supplier "${name}" created successfully`
+        }, 201);
     })
 );
 
@@ -56,21 +52,15 @@ router.post('/',
  */
 router.get('/:supplierId',
     validateParams({ supplierId: { type: 'id' } }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { supplierId } = req.params;
         
         const supplier = await supplierRepository.getById(supplierId);
         if (!supplier) {
-            return res.status(404).json({
-                success: false,
-                error: 'Supplier not found'
-            });
+            throw createNotFoundError('Supplier', supplierId);
         }
 
-        res.json({
-            success: true,
-            supplier
-        });
+        sendSuccessResponse(req, res, { supplier });
     })
 );
 
@@ -80,24 +70,20 @@ router.get('/:supplierId',
  */
 router.get('/:supplierId/items',
     validateParams({ supplierId: { type: 'id' } }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { supplierId } = req.params;
         
         // Verify supplier exists
         const supplier = await supplierRepository.getById(supplierId);
         if (!supplier) {
-            return res.status(404).json({
-                success: false,
-                error: 'Supplier not found'
-            });
+            throw createNotFoundError('Supplier', supplierId);
         }
 
         const items = await supplierRepository.getItemsBySupplierId(supplierId);
         
-        res.json({
-            success: true,
-            items,
-            supplier: supplier.name
+        sendSuccessResponse(req, res, { items, supplier: supplier.name }, {
+            count: items.length,
+            message: 'Supplier items retrieved successfully'
         });
     })
 );
@@ -114,23 +100,18 @@ router.put('/:supplierId/items/:supplierPriceId',
     validateBody({
         price: { required: true, type: 'number', min: 0 }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { supplierPriceId } = req.params;
         const { price } = req.body;
 
         const updatedPrice = await supplierRepository.updatePrice(supplierPriceId, price);
         
         if (!updatedPrice) {
-            return res.status(404).json({
-                success: false,
-                error: 'Supplier price record not found'
-            });
+            throw createNotFoundError('Supplier price record', supplierPriceId);
         }
 
-        res.json({
-            success: true,
-            message: 'Price updated successfully',
-            supplierPrice: updatedPrice
+        sendSuccessResponse(req, res, { supplierPrice: updatedPrice }, {
+            message: 'Price updated successfully'
         });
     })
 );
@@ -144,20 +125,16 @@ router.delete('/:supplierId/items/:supplierPriceId',
         supplierId: { type: 'id' },
         supplierPriceId: { type: 'id' }
     }),
-    asyncHandler(async (req, res) => {
+    enhancedAsyncHandler(async (req, res) => {
         const { supplierPriceId } = req.params;
 
         const deleted = await supplierRepository.removeProduct(supplierPriceId);
         
         if (!deleted) {
-            return res.status(404).json({
-                success: false,
-                error: 'Supplier price record not found'
-            });
+            throw createNotFoundError('Supplier price record', supplierPriceId);
         }
 
-        res.json({
-            success: true,
+        sendSuccessResponse(req, res, {}, {
             message: 'Item removed from supplier successfully'
         });
     })
