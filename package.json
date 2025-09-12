@@ -9,7 +9,7 @@
     "dev": "node src/app.js",
     "dev-web": "concurrently \"npm run build:watch\" \"npm run web\"",
     "web": "node server.js",
-    "build": "vite build && npm run migrate:unique-constraint",
+    "build": "vite build",
     "build:watch": "vite build --watch",
     "legacy": "node create_picklist.js",
     "setup-db": "node scripts/setup-database.js",
