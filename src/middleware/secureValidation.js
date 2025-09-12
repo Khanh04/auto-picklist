@@ -1,11 +1,29 @@
 const validator = require('validator');
-const DOMPurify = require('dompurify');
-const { JSDOM } = require('jsdom');
 const { AppError } = require('./errorHandler');
 
-// Create DOMPurify instance for server-side use
-const window = new JSDOM('').window;
-const purify = DOMPurify(window);
+// Initialize DOMPurify for server-side use with error handling
+let purify = null;
+try {
+    const DOMPurify = require('dompurify');
+    const { JSDOM } = require('jsdom');
+    const window = new JSDOM('').window;
+    purify = DOMPurify(window);
+} catch (error) {
+    console.warn('DOMPurify initialization failed, using basic HTML stripping:', error.message);
+    // Fallback HTML sanitization function
+    purify = {
+        sanitize: (input, options) => {
+            if (!options || !options.ALLOWED_TAGS || options.ALLOWED_TAGS.length === 0) {
+                // Strip all HTML tags
+                return input.replace(/<[^>]*>/g, '');
+            }
+            // Basic allowed tags filtering (not as robust as DOMPurify)
+            const allowedTags = options.ALLOWED_TAGS.join('|');
+            const regex = new RegExp(`<(?!/?(?:${allowedTags})(?:\\s|>))[^>]*>`, 'gi');
+            return input.replace(regex, '');
+        }
+    };
+}
 
 /**
  * Enhanced security validation middleware
