@@ -93,8 +93,23 @@ class DatabaseIntegrator {
     try {
       console.log('🔧 Setting up Knex migration tracking...');
 
-      // Create migration table if it doesn't exist
-      await this.knex.migrate.latest({ directory: path.join(__dirname, 'versions') });
+      // Create migration tracking tables if they don't exist
+      const migrationTableExists = await this.knex.schema.hasTable('knex_migrations');
+      if (!migrationTableExists) {
+        await this.knex.schema.createTable('knex_migrations', table => {
+          table.increments('id');
+          table.string('name');
+          table.integer('batch');
+          table.timestamp('migration_time');
+        });
+
+        await this.knex.schema.createTable('knex_migrations_lock', table => {
+          table.increments('index');
+          table.integer('is_locked');
+        });
+
+        console.log('✅ Created Knex migration tracking tables');
+      }
 
       // Check which migrations should be marked as completed
       const existingData = await this.checkExistingData();
