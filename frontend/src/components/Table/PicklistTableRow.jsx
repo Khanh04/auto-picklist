@@ -72,7 +72,7 @@ function PicklistTableRow({
                 className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 whitespace-nowrap"
                 title={`Product matched by preference (used ${item.frequency || 1} time${(item.frequency || 1) === 1 ? '' : 's'} before)`}
               >
-                🎯 Product Match
+                🎯 Product Preference
               </span>
             )}
             {item.supplierDecision?.isUserPreferred && (

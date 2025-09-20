@@ -68,7 +68,7 @@ function PicklistHeader({ results, summary }) {
               <div className="text-2xl font-bold text-blue-600">
                 🎯 {summary.productPreferences || 0}
               </div>
-              <div className="text-sm text-blue-700">Product Matches</div>
+              <div className="text-sm text-blue-700">Product Preferences</div>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-purple-600">

@@ -1051,10 +1051,10 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     <div className="min-h-screen bg-gray-100">
       {/* Shared List Header Banner */}
       {shareId && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
-          <div className="text-center">
-            <div className="text-sm text-blue-600">📤 Shared Shopping List</div>
-            <div className="text-xs text-blue-500">
+        <div className="bg-blue-50 border-b border-blue-200 px-4 lg:px-8 py-2">
+          <div className="text-center max-w-6xl mx-auto">
+            <div className="text-sm md:text-base text-blue-600">📤 Shared Shopping List</div>
+            <div className="text-xs md:text-sm text-blue-500">
               Real-time collaboration active
             </div>
           </div>
@@ -1063,28 +1063,28 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
 
       {/* Header - Fixed */}
       <div className="bg-white shadow-sm sticky top-0 z-10 border-b">
-        <div className="px-4 py-3">
+        <div className="px-4 lg:px-8 py-3 max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <button
               onClick={onBack}
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="text-blue-600 hover:text-blue-800 font-medium text-sm md:text-base"
             >
               ← Back {shareId ? 'to Main App' : 'to Picklist'}
             </button>
-            <h1 className="text-lg font-bold text-gray-900">Shopping List</h1>
-            <div className="flex items-center gap-2">
+            <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Shopping List</h1>
+            <div className="flex items-center gap-2 md:gap-3">
               {!shareId && (
                 <button
                   onClick={handleShare}
                   disabled={isSharing}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium disabled:opacity-50"
+                  className="text-blue-600 hover:text-blue-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
                 >
                   {isSharing ? '⏳' : '📤'} Share
                 </button>
               )}
               <button
                 onClick={handleClearAll}
-                className="text-red-600 hover:text-red-800 text-sm font-medium"
+                className="text-red-600 hover:text-red-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
                 disabled={checkedItems.size === 0}
               >
                 Clear All
@@ -1093,26 +1093,29 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           </div>
 
           {/* Progress Bar */}
-          <div className="mb-2">
-            <div className="flex justify-between items-center text-sm text-gray-600 mb-1">
+          <div className="mb-3">
+            <div className="flex justify-between items-center text-sm md:text-base text-gray-600 mb-2">
               <span>{stats.checked} of {stats.total} items</span>
-              <span>{progressPercent}% complete</span>
+              <span className="font-medium">{progressPercent}% complete</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 rounded-full h-2 md:h-3">
               <div
-                className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                className="bg-green-500 h-2 md:h-3 rounded-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               ></div>
             </div>
           </div>
 
-          {/* Cost Summary */}
-          <div className="flex justify-between items-center text-sm">
-            <div className="text-gray-600">
-              <span className="line-through">${checkedCost.toFixed(2)}</span>
-              <span className="ml-2 text-gray-800">${(totalCost - checkedCost).toFixed(2)} remaining</span>
+          {/* Cost Summary - Enhanced for iPad */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 text-sm md:text-base">
+            <div className="text-gray-600 md:col-span-2">
+              <span className="inline-block">Completed: </span>
+              <span className="line-through font-medium">${checkedCost.toFixed(2)}</span>
+              <span className="ml-2 md:ml-3 text-gray-800 font-medium">
+                Remaining: ${(totalCost - checkedCost).toFixed(2)}
+              </span>
             </div>
-            <div className="text-gray-800 font-medium">
+            <div className="text-gray-800 font-bold text-right md:text-lg">
               Total: ${totalCost.toFixed(2)}
             </div>
           </div>
@@ -1120,14 +1123,14 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       </div>
 
       {/* Options Bar */}
-      <div className="bg-white border-b px-4 py-2">
-        <div className="flex items-center justify-between">
-          <label className="flex items-center text-sm text-gray-600">
+      <div className="bg-white border-b px-4 lg:px-8 py-2 md:py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <label className="flex items-center text-sm md:text-base text-gray-600 cursor-pointer hover:text-gray-800 transition-colors">
             <input
               type="checkbox"
               checked={showCompleted}
               onChange={(e) => setShowCompleted(e.target.checked)}
-              className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             Show completed items
           </label>
@@ -1155,60 +1158,58 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       </div>
 
       {/* Shopping List Content */}
-      <div className="px-4 py-4 pb-20">
-        {Object.entries(groupedItems).map(([supplier, items]) => {
-          const supplierChecked = items.filter(item => checkedItems.has(item.index)).length;
-          const supplierTotal = items.length;
-          const allChecked = supplierChecked === supplierTotal;
-          const someChecked = supplierChecked > 0;
-          const isCollapsed = collapsedSuppliers.has(supplier);
+      <div className="px-4 lg:px-8 py-4 pb-20 max-w-6xl mx-auto">
+        <div className="gap-4 lg:gap-6">
+          {Object.entries(groupedItems).map(([supplier, items]) => {
+            const supplierChecked = items.filter(item => checkedItems.has(item.index)).length;
+            const supplierTotal = items.length;
+            const allChecked = supplierChecked === supplierTotal;
+            const someChecked = supplierChecked > 0;
+            const isCollapsed = collapsedSuppliers.has(supplier);
 
-          return (
-            <div key={supplier} className="bg-white rounded-lg shadow-sm mb-4 overflow-hidden">
-              {/* Supplier Header */}
-              <div className="bg-gray-50 border-b px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => handleCheckAllSupplier(items)}
-                      className="mr-3 focus:outline-none"
-                    >
-                      <div className={`w-6 h-6 border-2 rounded flex items-center justify-center cursor-pointer ${
-                        allChecked 
-                          ? 'bg-blue-600 border-blue-600 text-white' 
-                          : someChecked 
-                          ? 'bg-blue-100 border-blue-600' 
-                          : 'border-gray-300'
-                      }`}>
-                        {allChecked && '✓'}
-                        {someChecked && !allChecked && '-'}
+            return (
+              <div key={supplier} className="bg-white rounded-lg shadow-sm overflow-hidden h-fit">
+                {/* Supplier Header */}
+                <div className="bg-gray-50 border-b px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => handleCheckAllSupplier(items)}
+                        className="mr-3 focus:outline-none"
+                      >
+                        <div className={`w-6 h-6 md:w-7 md:h-7 border-2 rounded flex items-center justify-center cursor-pointer transition-all ${
+                          allChecked
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : someChecked
+                            ? 'bg-blue-100 border-blue-600'
+                            : 'border-gray-300 hover:border-blue-400'
+                        }`}>
+                          {allChecked && '✓'}
+                          {someChecked && !allChecked && '-'}
+                        </div>
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 text-sm md:text-base truncate">{supplier}</h3>
+                        <p className="text-xs md:text-sm text-gray-600">
+                          {supplierChecked}/{supplierTotal} items
+                        </p>
                       </div>
-                    </button>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{supplier}</h3>
-                      <p className="text-sm text-gray-600">
-                        {supplierChecked}/{supplierTotal} items
-                      </p>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-right text-sm text-gray-600">
-                      {items.length} item{items.length !== 1 ? 's' : ''}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleSupplierCollapse(supplier)}
+                        className="p-1 md:p-2 hover:bg-gray-200 rounded-md transition-colors focus:outline-none"
+                        title={isCollapsed ? 'Expand supplier' : 'Collapse supplier'}
+                      >
+                        <div className={`transform transition-transform duration-200 text-gray-600 ${
+                          isCollapsed ? 'rotate-0' : 'rotate-90'
+                        }`}>
+                          ▶
+                        </div>
+                      </button>
                     </div>
-                    <button
-                      onClick={() => toggleSupplierCollapse(supplier)}
-                      className="p-1 hover:bg-gray-200 rounded-md transition-colors focus:outline-none"
-                      title={isCollapsed ? 'Expand supplier' : 'Collapse supplier'}
-                    >
-                      <div className={`transform transition-transform duration-200 ${
-                        isCollapsed ? 'rotate-0' : 'rotate-90'
-                      }`}>
-                        ▶
-                      </div>
-                    </button>
                   </div>
                 </div>
-              </div>
 
               {/* Items List - Collapsible */}
               {!isCollapsed && (
@@ -1237,17 +1238,17 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                       return (
                         <div
                           key={item.index}
-                          className={`px-4 py-3 transition-all duration-200 ${
-                            isChecked ? 'bg-gray-50 opacity-75' : 'bg-white hover:bg-gray-50'
+                          className={`px-4 py-3 md:py-4 transition-all duration-200 cursor-pointer ${
+                            isChecked ? 'bg-gray-50 opacity-75' : 'bg-white hover:bg-gray-50 active:bg-gray-100'
                           }`}
                           onClick={() => handleItemCheck(item.isRemainingPortion ? item.originalIndex : item.index)}
                         >
-                          <div className="flex items-start space-x-3">
+                          <div className="flex items-start space-x-3 md:space-x-4">
                             {/* Checkbox */}
                             <div className="flex-shrink-0 mt-1">
-                              <div className={`w-6 h-6 border-2 rounded flex items-center justify-center transition-colors cursor-pointer ${
-                                isChecked 
-                                  ? 'bg-green-500 border-green-500 text-white' 
+                              <div className={`w-6 h-6 md:w-7 md:h-7 border-2 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                                isChecked
+                                  ? 'bg-green-500 border-green-500 text-white'
                                   : 'border-gray-300 hover:border-green-400'
                               }`}>
                                 {isChecked && '✓'}
@@ -1257,22 +1258,22 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                             {/* Item Details */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between">
-                                <div className="flex-1 min-w-0 mr-2">
-                                  <h4 className={`text-sm font-medium leading-5 ${
+                                <div className="flex-1 min-w-0 mr-2 md:mr-3">
+                                  <h4 className={`text-sm md:text-base font-medium leading-5 md:leading-6 ${
                                     isChecked ? 'line-through text-gray-500' : 'text-gray-900'
                                   }`}>
                                     {item.originalItem || item.item}
                                   </h4>
                                 </div>
                                 <div className="text-right flex-shrink-0">
-                                  <div className={`text-sm font-medium ${
+                                  <div className={`text-sm md:text-base font-medium ${
                                     isChecked ? 'line-through text-gray-500' : 'text-gray-900'
                                   }`}>
-                                    {typeof item.unitPrice === 'number' 
-                                      ? `$${item.unitPrice.toFixed(2)}` 
+                                    {typeof item.unitPrice === 'number'
+                                      ? `$${item.unitPrice.toFixed(2)}`
                                       : item.unitPrice}
                                   </div>
-                                  <div className={`text-xs ${
+                                  <div className={`text-xs md:text-sm ${
                                     isChecked ? 'text-gray-400' : 'text-gray-600'
                                   }`}>
                                     Qty: {item.quantity}
@@ -1280,12 +1281,12 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                 </div>
                               </div>
                               <div className="mt-2 flex items-center justify-between">
-                                <div className={`text-xs ${
+                                <div className={`text-xs md:text-sm ${
                                   isChecked ? 'text-gray-400' : 'text-gray-600'
                                 }`}>
                                   Total: {item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : 'N/A'}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 md:gap-2">
                                   {/* Not Available Button */}
                                   {!isChecked && item.matchedItemId && (
                                     <button
@@ -1294,10 +1295,10 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                         handleSupplierNotAvailable(item, item.index);
                                       }}
                                       disabled={switchingSupplier.has(item.index)}
-                                      className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${
+                                      className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md font-medium transition-colors ${
                                         switchingSupplier.has(item.index)
                                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300'
+                                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200 active:bg-orange-300 border border-orange-300'
                                       }`}
                                       title="Move this item to back order"
                                     >
@@ -1305,7 +1306,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                     </button>
                                   )}
                                   {isChecked && (
-                                    <div className="text-xs text-green-600 font-medium">
+                                    <div className="text-xs md:text-sm text-green-600 font-medium">
                                       ✓ Purchased
                                     </div>
                                   )}
@@ -1318,54 +1319,55 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                     })}
                 </div>
               )}
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Share Options Modal */}
       {showShareOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Share Shopping List</h3>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md md:max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 md:p-8">
+              <div className="flex items-center justify-between mb-4 md:mb-6">
+                <h3 className="text-lg md:text-xl font-semibold text-gray-900">Share Shopping List</h3>
                 <button
                   onClick={() => setShowShareOptions(false)}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
+                  className="text-gray-400 hover:text-gray-600 text-xl md:text-2xl p-1"
                 >
                   ×
                 </button>
               </div>
               
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
+              <div className="mb-4 md:mb-6">
+                <p className="text-sm md:text-base text-gray-600 mb-3">
                   Share this shopping list with others. The link will expire in 24 hours.
                 </p>
-                <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 break-all">
+                <div className="bg-gray-50 p-3 md:p-4 rounded-lg text-sm md:text-base text-gray-700 break-all">
                   {shareUrl}
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3 md:space-y-4">
                 {navigator.share && (
                   <button
                     onClick={handleNativeShare}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    className="w-full bg-blue-600 text-white py-3 md:py-4 px-4 md:px-6 rounded-lg font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-2 text-sm md:text-base"
                   >
                     📤 Share via Apps
                   </button>
                 )}
-                
+
                 <button
                   onClick={handleCopyLink}
-                  className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-gray-600 text-white py-3 md:py-4 px-4 md:px-6 rounded-lg font-medium hover:bg-gray-700 active:bg-gray-800 transition-colors flex items-center justify-center gap-2 text-sm md:text-base"
                 >
                   📋 Copy Link
                 </button>
               </div>
 
-              <div className="mt-4 text-xs text-gray-500 text-center">
+              <div className="mt-4 md:mt-6 text-xs md:text-sm text-gray-500 text-center">
                 Recipients can check off items independently
               </div>
             </div>

@@ -228,7 +228,7 @@ export function usePicklistOperations(
       item && item.selectedSupplier !== 'back order'
     ).length
 
-    // Count legacy product matching preferences
+    // Count product matching preferences
     const productPreferences = currentPicklist.filter(item =>
       item.isPreference === true
     ).length
@@ -284,7 +284,7 @@ export function usePicklistOperations(
         matchedProductId: item.matchedItemId
       }))
 
-    // Store legacy preferences if any manual overrides were made
+    // Store product preferences if any manual overrides were made
     if (preferences.length > 0) {
       try {
         const response = await fetch('/api/preferences', {
@@ -296,12 +296,12 @@ export function usePicklistOperations(
         })
 
         if (!response.ok) {
-          console.error('Failed to store legacy preferences - server error:', response.status)
+          console.error('Failed to store product preferences - server error:', response.status)
         } else {
-          devLog(`Stored ${preferences.length} legacy product matching preferences`)
+          devLog(`Stored ${preferences.length} product matching preferences`)
         }
       } catch (prefError) {
-        console.warn('Failed to store legacy preferences - network error:', prefError)
+        console.warn('Failed to store product preferences - network error:', prefError)
         // Don't block operation if preference storage fails
       }
     }
