@@ -45,17 +45,14 @@ async function deploy() {
         console.log('\n⏳ Step 2: Wait for Database Connection');
         await runCommand('node', ['scripts/wait-for-db.js']);
         
-        // Step 3: Run migration
-        console.log('\n🔄 Step 3: Database Migration');
-        await runCommand('npm', ['run', 'migrate:railway']);
-        
-        // Step 4: Start application
-        console.log('\n🚀 Step 4: Start Application');
+        // Step 3: Start application with auto-migration
+        console.log('\n🚀 Step 3: Start Application with Auto-Migration');
         console.log('=====================================');
-        console.log('🎉 Migration completed successfully!');
+        console.log('ℹ️  Server will automatically run migrations on startup');
+        console.log('🔄 Auto-migration integrated into server.js');
         console.log('🌐 Starting web server...');
-        
-        // Start the application (this will not return)
+
+        // Start the application (this will auto-migrate then start server)
         await runCommand('npm', ['start']);
         
     } catch (error) {
@@ -65,6 +62,8 @@ async function deploy() {
         console.error('2. Verify database service is healthy and connected');
         console.error('3. Check environment variables with: railway variables');
         console.error('4. Review logs with: railway logs');
+        console.error('5. Check migration status manually: npm run migrate:status');
+        console.error('6. Run migrations manually if needed: npm run migrate');
         
         process.exit(1);
     }
