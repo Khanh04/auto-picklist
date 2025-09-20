@@ -6,6 +6,7 @@ const http = require('http');
 
 // Import configuration and middleware
 const config = require('./src/config');
+const MigrationManager = require('./src/migrations/MigrationManager');
 const { globalErrorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
 const { rateLimit } = require('./src/middleware/validation');
 const { preventRequestBombing } = require('./src/middleware/secureValidation');
@@ -505,19 +506,58 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// Start server
-server.listen(port, () => {
-    console.log(`🚀 ${config.app.name} v${config.app.version}`);
-    console.log(`🌐 Server running on http://${config.server.host}:${port}`);
-    console.log(`📊 Environment: ${config.NODE_ENV}`);
-    console.log(`💾 Database: ${config.database.host}:${config.database.port}/${config.database.name}`);
-    console.log(`🔌 WebSocket server ready for real-time connections`);
-    
-    if (config.features.enableHealthCheck) {
-        console.log(`🏥 Health check: http://${config.server.host}:${port}/health`);
+// Auto-migration function
+async function runMigrations() {
+    const migrationManager = new MigrationManager();
+
+    try {
+        const needsMigration = await migrationManager.needsMigration();
+
+        if (needsMigration) {
+            console.log('🔄 Running database migrations...');
+            await migrationManager.migrate();
+            console.log('✅ Migrations completed successfully');
+        } else {
+            console.log('✅ Database is up to date');
+        }
+    } catch (error) {
+        console.error('❌ Migration failed:', error.message);
+        if (config.isProduction()) {
+            console.error('💥 Stopping server due to migration failure in production');
+            process.exit(1);
+        } else {
+            console.warn('⚠️  Continuing in development mode despite migration failure');
+        }
+    } finally {
+        await migrationManager.close();
     }
-    
-    console.log('✨ Server ready to accept connections');
+}
+
+// Start server with migrations
+async function startServer() {
+    // Run migrations first
+    await runMigrations();
+
+    // Then start the server
+    server.listen(port, () => {
+        console.log(`🚀 ${config.app.name} v${config.app.version}`);
+        console.log(`🌐 Server running on http://${config.server.host}:${port}`);
+        console.log(`📊 Environment: ${config.NODE_ENV}`);
+        console.log(`💾 Database: ${config.database.host}:${config.database.port}/${config.database.name}`);
+        console.log(`🔌 WebSocket server ready for real-time connections`);
+
+        if (config.features.enableHealthCheck) {
+            console.log(`🏥 Health check: http://${config.server.host}:${port}/health`);
+        }
+
+        console.log('✨ Server ready to accept connections');
+    });
+}
+
+// Start the application
+startServer().catch(error => {
+    console.error('💥 Failed to start server:', error);
+    process.exit(1);
 });
 
 module.exports = app;
