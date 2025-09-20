@@ -13,7 +13,7 @@ import PicklistTable from './Table/PicklistTable'
 import ExportResultsPanel from './Export/ExportResultsPanel'
 import ActionButtons from './Export/ActionButtons'
 
-function PicklistPreview({ results, onBack, onNavigate }) {
+function PicklistPreviewRefactored({ results, onBack, onNavigate }) {
   const [initialDataFetched, setInitialDataFetched] = useState(false)
   const [lastProcessedPicklistHash, setLastProcessedPicklistHash] = useState('')
 
@@ -235,4 +235,4 @@ function PicklistPreview({ results, onBack, onNavigate }) {
   )
 }
 
-export default PicklistPreview
+export default PicklistPreviewRefactored
