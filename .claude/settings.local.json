@@ -19,7 +19,8 @@
       "Bash(npm test)",
       "Bash(grep:*)",
       "Bash(docker:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

@@ -61,4 +61,4 @@ coverage/
 test-output.*
 
 # Claude settings (optional - keep if you want Claude context)
-.claude/
+.claude/old-scripts-backup/
