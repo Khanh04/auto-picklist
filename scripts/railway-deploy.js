@@ -45,14 +45,17 @@ async function deploy() {
         console.log('\n⏳ Step 2: Wait for Database Connection');
         await runCommand('node', ['scripts/wait-for-db.js']);
         
-        // Step 3: Start application with auto-migration
-        console.log('\n🚀 Step 3: Start Application with Auto-Migration');
+        // Step 3: Initialize migration system for existing database
+        console.log('\n🔄 Step 3: Initialize Migration System');
+        await runCommand('npm', ['run', 'migrate:integrate']);
+
+        // Step 4: Start application
+        console.log('\n🚀 Step 4: Start Application');
         console.log('=====================================');
-        console.log('ℹ️  Server will automatically run migrations on startup');
-        console.log('🔄 Auto-migration integrated into server.js');
+        console.log('✅ Migration system initialized');
         console.log('🌐 Starting web server...');
 
-        // Start the application (this will auto-migrate then start server)
+        // Start the application
         await runCommand('npm', ['start']);
         
     } catch (error) {

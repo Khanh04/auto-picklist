@@ -523,7 +523,8 @@ async function runMigrations() {
     } catch (error) {
         console.error('❌ Migration failed:', error.message);
         if (config.isProduction()) {
-            console.error('💥 Stopping server due to migration failure in production');
+            console.error('💡 In production, run "npm run migrate:integrate" first if this is an existing database');
+            console.error('💡 Or check migration status with deployment scripts');
             process.exit(1);
         } else {
             console.warn('⚠️  Continuing in development mode despite migration failure');
