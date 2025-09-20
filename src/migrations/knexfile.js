@@ -12,11 +12,11 @@ module.exports = {
       database: process.env.DB_NAME || 'autopicklist'
     },
     migrations: {
-      directory: path.join(__dirname, 'src', 'migrations', 'versions'),
+      directory: path.join(__dirname, 'versions'),
       tableName: 'knex_migrations'
     },
     seeds: {
-      directory: path.join(__dirname, 'src', 'migrations', 'seeds')
+      directory: path.join(__dirname, 'seeds')
     },
     pool: {
       min: 2,
@@ -34,11 +34,11 @@ module.exports = {
       database: process.env.PGDATABASE || process.env.DB_NAME
     },
     migrations: {
-      directory: path.join(__dirname, 'src', 'migrations', 'versions'),
+      directory: path.join(__dirname, 'versions'),
       tableName: 'knex_migrations'
     },
     seeds: {
-      directory: path.join(__dirname, 'src', 'migrations', 'seeds')
+      directory: path.join(__dirname, 'seeds')
     },
     pool: {
       min: 1,
@@ -58,11 +58,11 @@ module.exports = {
       database: process.env.TEST_DB_NAME || 'autopicklist_test'
     },
     migrations: {
-      directory: path.join(__dirname, 'src', 'migrations', 'versions'),
+      directory: path.join(__dirname, 'versions'),
       tableName: 'knex_migrations'
     },
     seeds: {
-      directory: path.join(__dirname, 'src', 'migrations', 'seeds')
+      directory: path.join(__dirname, 'seeds')
     },
     pool: {
       min: 1,

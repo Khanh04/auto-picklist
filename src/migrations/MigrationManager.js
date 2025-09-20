@@ -8,7 +8,7 @@ const path = require('path');
 class MigrationManager {
   constructor() {
     const environment = process.env.NODE_ENV || 'development';
-    const knexConfig = require(path.join(process.cwd(), 'knexfile.js'))[environment];
+    const knexConfig = require('./knexfile.js')[environment];
     this.knex = knex(knexConfig);
     this.environment = environment;
   }
@@ -23,7 +23,7 @@ class MigrationManager {
       console.log(`🔄 Running database migrations (${this.environment})...`);
 
       const [batchNo, log] = await this.knex.migrate.latest({
-        directory: path.join(process.cwd(), 'src', 'migrations', 'versions')
+        directory: path.join(__dirname, 'versions')
       });
 
       if (log.length === 0) {
@@ -52,7 +52,7 @@ class MigrationManager {
       console.log('🔄 Rolling back last migration batch...');
 
       const [batchNo, log] = await this.knex.migrate.rollback({
-        directory: path.join(process.cwd(), 'src', 'migrations', 'versions')
+        directory: path.join(__dirname, 'versions')
       });
 
       if (log.length === 0) {
@@ -78,7 +78,7 @@ class MigrationManager {
   async status() {
     try {
       const [completed, pending] = await this.knex.migrate.list({
-        directory: path.join(process.cwd(), 'src', 'migrations', 'versions')
+        directory: path.join(__dirname, 'versions')
       });
 
       return {
@@ -143,7 +143,7 @@ class MigrationManager {
   async makeMigration(name) {
     try {
       const migrationName = await this.knex.migrate.make(name, {
-        directory: path.join(process.cwd(), 'src', 'migrations', 'versions')
+        directory: path.join(__dirname, 'versions')
       });
 
       console.log(`✅ Created migration: ${migrationName}`);
@@ -163,7 +163,7 @@ class MigrationManager {
       console.log('🌱 Running database seeds...');
 
       const log = await this.knex.seed.run({
-        directory: path.join(process.cwd(), 'src', 'migrations', 'seeds')
+        directory: path.join(__dirname, 'seeds')
       });
 
       console.log(`✅ Executed ${log.length} seed files:`);
