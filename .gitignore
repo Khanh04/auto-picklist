@@ -62,3 +62,4 @@ test-output.*
 
 # Claude settings (optional - keep if you want Claude context)
 .claude/old-scripts-backup/
+old-scripts-backup
