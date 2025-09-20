@@ -884,39 +884,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     }
   };
 
-  const handleNoSupplier = async () => {
-    if (!supplierModalData) return;
-
-    const { index } = supplierModalData;
-    
-    // Use unified sync manager
-    const result = await syncPicklistData(
-      prevPicklist => {
-        const newPicklist = [...prevPicklist];
-        newPicklist[index] = {
-          ...newPicklist[index],
-          selectedSupplier: 'back order',
-          unitPrice: 'No price found',
-          totalPrice: 'N/A'
-        };
-        return newPicklist;
-      },
-      { 
-        broadcastToOthers: true, 
-        itemIndex: index 
-      }
-    );
-
-    if (result.success) {
-      devLog(`✅ Marked item ${index} as "No supplier found"`);
-    } else {
-      console.error(`❌ Failed to mark item ${index} as no supplier`);
-    }
-
-    // Close modal
-    setShowSupplierModal(false);
-    setSupplierModalData(null);
-  };
 
   const handleShare = async () => {
     setIsSharing(true);
