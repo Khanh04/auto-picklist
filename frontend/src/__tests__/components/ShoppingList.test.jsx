@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '../../test-utils/render';
 import userEvent from '@testing-library/user-event';
 import ShoppingList from '../../components/ShoppingList';
 
@@ -9,7 +9,12 @@ jest.mock('../../hooks/useWebSocket', () => ({
   default: () => ({
     isConnected: false,
     connectionError: null,
-    broadcastUpdate: jest.fn()
+    subscribe: jest.fn(() => jest.fn()), // returns an unsubscribe function
+    broadcastUpdate: jest.fn(),
+    updateItem: jest.fn(),
+    toggleCompleted: jest.fn(),
+    switchSupplier: jest.fn(),
+    disconnect: jest.fn()
   })
 }));
 
@@ -41,7 +46,7 @@ describe('ShoppingList Component', () => {
         unitPrice: 1.75,
         totalPrice: '3.50',
         requestedQuantity: 2,
-        purchasedQuantity: 1
+  purchasedQuantity: 2
       }
     ],
     onBack: jest.fn(),
@@ -386,15 +391,16 @@ describe('ShoppingList Component', () => {
     test('should calculate total cost correctly', () => {
       render(<ShoppingList {...defaultProps} />);
       
-      // Should show correct total cost calculation
-      expect(screen.getByText('$11.00')).toBeInTheDocument(); // 7.50 + 3.50
+  // Should show correct total cost calculation
+  expect(screen.getByText(/Total: \$11\.00/)).toBeInTheDocument(); // 7.50 + 3.50
     });
 
     test('should calculate progress percentage correctly', () => {
       render(<ShoppingList {...defaultProps} />);
       
       // With 1 of 2 items completed, should show 50%
-      expect(screen.getByText('50% complete')).toBeInTheDocument();
+  expect(screen.getByText('50')).toBeInTheDocument();
+  expect(screen.getByText('% complete')).toBeInTheDocument();
     });
   });
 });

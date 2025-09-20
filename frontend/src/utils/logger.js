@@ -1,12 +1,20 @@
 // Utility functions for conditional logging in development
 export const devLog = (...args) => {
-  if (import.meta.env.MODE !== 'production') {
+  // In test environment, always allow logging for debugging
+  // In production, suppress logs
+  const mode = process.env.NODE_ENV || 'development';
+
+  if (mode !== 'production') {
     console.log(...args);
   }
 };
 
 export const devWarn = (...args) => {
-  if (import.meta.env.MODE !== 'production') {
+  // In test environment, always allow logging for debugging
+  // In production, suppress logs
+  const mode = process.env.NODE_ENV || 'development';
+
+  if (mode !== 'production') {
     console.warn(...args);
   }
 };

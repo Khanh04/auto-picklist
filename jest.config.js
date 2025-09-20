@@ -23,7 +23,7 @@ module.exports = {
   moduleNameMapper: {
     '\\.(css|less|scss)$': 'identity-obj-proxy',
   },
-  setupFilesAfterEnv: ['<rootDir>/src/setupTests.js'],
+  setupFilesAfterEnv: ['<rootDir>/frontend/src/setupTests.js'],
   collectCoverageFrom: [
     'frontend/src/**/*.{js,jsx}',
     '!frontend/src/main.jsx',
@@ -43,5 +43,8 @@ module.exports = {
         MODE: 'test'
       }
     }
-  }
+  },
+  transformIgnorePatterns: [
+    'node_modules/(?!(msw)/)'
+  ]
 };

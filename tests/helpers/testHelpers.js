@@ -39,15 +39,15 @@ const createMockPool = () => ({
  */
 const createMockClient = (queryResults = {}) => ({
   query: jest.fn().mockImplementation((text, params) => {
-    // Return specific results based on query type
-    if (text.includes('SELECT') && text.includes('suppliers')) {
+    // Return specific results based on query type - check more specific patterns first
+    if (text.includes('SELECT') && text.includes('matching_preferences')) {
+      return { rows: queryResults.preferences || [] };
+    }
+    if (text.includes('SELECT') && text.includes('suppliers') && !text.includes('preferences')) {
       return { rows: queryResults.suppliers || [] };
     }
-    if (text.includes('SELECT') && text.includes('products')) {
+    if (text.includes('SELECT') && text.includes('products') && !text.includes('preferences')) {
       return { rows: queryResults.products || [] };
-    }
-    if (text.includes('SELECT') && text.includes('preferences')) {
-      return { rows: queryResults.preferences || [] };
     }
     if (text.includes('INSERT')) {
       return { rows: [{ id: 1 }], insertId: 1 };

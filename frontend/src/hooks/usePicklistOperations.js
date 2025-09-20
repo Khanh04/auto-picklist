@@ -213,7 +213,7 @@ export function usePicklistOperations(
 
   const calculateSummary = () => {
     const itemsWithSuppliers = currentPicklist.filter(item =>
-      item.selectedSupplier !== 'back order'
+      item && item.selectedSupplier !== 'back order'
     ).length
 
     const preferenceMatches = currentPicklist.filter(item =>

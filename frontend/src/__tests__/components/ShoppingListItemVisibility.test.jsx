@@ -9,7 +9,12 @@ jest.mock('../../hooks/useWebSocket', () => ({
   default: () => ({
     isConnected: false,
     connectionError: null,
-    broadcastUpdate: jest.fn()
+    subscribe: jest.fn(() => jest.fn()), // returns an unsubscribe function
+    broadcastUpdate: jest.fn(),
+    updateItem: jest.fn(),
+    toggleCompleted: jest.fn(),
+    switchSupplier: jest.fn(),
+    disconnect: jest.fn()
   })
 }));
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '../../test-utils/render';
 import userEvent from '@testing-library/user-event';
 import { PicklistProvider } from '../../contexts/PicklistContext';
 import PicklistPreview from '../../components/PicklistPreview';
@@ -11,7 +11,12 @@ jest.mock('../../hooks/useWebSocket', () => ({
   default: () => ({
     isConnected: false,
     connectionError: null,
-    broadcastUpdate: jest.fn()
+    subscribe: jest.fn(() => jest.fn()), // returns an unsubscribe function
+    broadcastUpdate: jest.fn(),
+    updateItem: jest.fn(),
+    toggleCompleted: jest.fn(),
+    switchSupplier: jest.fn(),
+    disconnect: jest.fn()
   })
 }));
 
