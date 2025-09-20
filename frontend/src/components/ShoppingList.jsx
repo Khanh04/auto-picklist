@@ -799,6 +799,41 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     });
   };
 
+  const handleSwitchSupplier = async (item, itemIndex) => {
+    if (switchingSupplier.has(itemIndex)) return;
+
+    setSwitchingSupplier(prev => new Set(prev).add(itemIndex));
+
+    try {
+      // Fetch available suppliers for this item
+      const response = await fetch(`/api/items/${item.matchedItemId}/suppliers`);
+      const result = await response.json();
+
+      if (result.success) {
+        setSupplierModalData({
+          item,
+          index: itemIndex,
+          currentSupplier: item.selectedSupplier,
+          currentPrice: parseFloat(item.unitPrice) || 0,
+          availableSuppliers: result.data.availableSuppliers
+        });
+        setShowSupplierModal(true);
+      } else {
+        console.error('Failed to fetch suppliers:', result.error);
+        alert('Failed to load available suppliers. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      alert('Network error while loading suppliers. Please try again.');
+    } finally {
+      setSwitchingSupplier(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemIndex);
+        return newSet;
+      });
+    }
+  };
+
   const handleManualSupplierSelection = async (selectedSupplier, selectedPrice) => {
     if (!supplierModalData) return;
 
@@ -806,51 +841,36 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     setSwitchingSupplier(prev => new Set(prev).add(index));
 
     try {
-      const response = await fetch(`/api/items/${item.matchedItemId}/select-supplier`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      // Calculate new total price
+      const newTotalPrice = (selectedPrice * item.quantity).toFixed(2);
+
+      // Use unified sync manager to update the item
+      const syncResult = await syncPicklistData(
+        prevPicklist => {
+          const newPicklist = [...prevPicklist];
+          newPicklist[index] = {
+            ...newPicklist[index],
+            selectedSupplier: selectedSupplier,
+            unitPrice: selectedPrice,
+            totalPrice: newTotalPrice
+          };
+          return newPicklist;
         },
-        body: JSON.stringify({
-          selectedSupplier: selectedSupplier,
-          selectedPrice: selectedPrice
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const newTotalPrice = (result.supplier.price * item.quantity).toFixed(2);
-        
-        // Use unified sync manager
-        const syncResult = await syncPicklistData(
-          prevPicklist => {
-            const newPicklist = [...prevPicklist];
-            newPicklist[index] = {
-              ...newPicklist[index],
-              selectedSupplier: result.supplier.name,
-              unitPrice: result.supplier.price,
-              totalPrice: newTotalPrice
-            };
-            return newPicklist;
-          },
-          { 
-            broadcastToOthers: true, 
-            itemIndex: index 
-          }
-        );
-
-        if (syncResult.success) {
-          devLog(`✅ Manually switched supplier for "${item.originalItem}" to ${result.supplier.name} ($${result.supplier.price})`);
-        } else {
-          console.error(`❌ Failed to update supplier for "${item.originalItem}"`);
+        {
+          broadcastToOthers: true,
+          itemIndex: index
         }
-        
+      );
+
+      if (syncResult.success) {
+        devLog(`✅ Switched supplier for "${item.originalItem || item.item}" to ${selectedSupplier} ($${selectedPrice})`);
+
         // Close modal
         setShowSupplierModal(false);
         setSupplierModalData(null);
       } else {
-        alert(result.error || 'Unable to select supplier');
+        console.error(`❌ Failed to update supplier for "${item.originalItem || item.item}"`);
+        alert('Failed to switch supplier. Please try again.');
       }
     } catch (error) {
       console.error('Error selecting supplier:', error);
@@ -1287,7 +1307,25 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                                   Total: {item.totalPrice !== 'N/A' ? `$${item.totalPrice}` : 'N/A'}
                                 </div>
                                 <div className="flex items-center gap-1 md:gap-2">
-                                  {/* Not Available Button */}
+                                  {/* Switch Supplier Button */}
+                                  {!isChecked && item.matchedItemId && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSwitchSupplier(item, item.index);
+                                      }}
+                                      disabled={switchingSupplier.has(item.index)}
+                                      className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md font-medium transition-colors ${
+                                        switchingSupplier.has(item.index)
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200 active:bg-blue-300 border border-blue-300'
+                                      }`}
+                                      title="Switch to a different supplier"
+                                    >
+                                      {switchingSupplier.has(item.index) ? '⏳ Loading...' : 'Switch Supplier'}
+                                    </button>
+                                  )}
+                                  {/* Back Order Button */}
                                   {!isChecked && item.matchedItemId && (
                                     <button
                                       onClick={(e) => {
@@ -1394,7 +1432,9 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Select Alternative Supplier</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {supplierModalData.availableSuppliers ? 'Switch Supplier' : 'Select Alternative Supplier'}
+                </h3>
                 <button
                   onClick={() => {
                     setShowSupplierModal(false);
@@ -1405,51 +1445,76 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
                   ×
                 </button>
               </div>
-              
+
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-2">
-                  <strong>Item:</strong> {supplierModalData.item.originalItem}
+                  <strong>Item:</strong> {supplierModalData.item.originalItem || supplierModalData.item.item}
                 </p>
-                <p className="text-sm text-orange-600 mb-4">
-                  No higher-priced suppliers available. Please select an alternative or mark as "back order".
-                </p>
+                {supplierModalData.currentSupplier && (
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Current Supplier:</strong> {supplierModalData.currentSupplier}
+                    {supplierModalData.currentPrice && ` ($${supplierModalData.currentPrice.toFixed(2)})`}
+                  </p>
+                )}
+                {!supplierModalData.availableSuppliers && (
+                  <p className="text-sm text-orange-600 mb-4">
+                    No higher-priced suppliers available. Please select an alternative or mark as "back order".
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3 mb-6">
                 <h4 className="text-sm font-medium text-gray-900">Available Suppliers:</h4>
-                {supplierModalData.availableSuppliers.map((supplier, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleManualSupplierSelection(supplier.name, supplier.price)}
-                    disabled={supplier.isCurrent}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      supplier.isCurrent
-                        ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {supplier.name}
-                          {supplier.isCurrent && ' (Current)'}
+                {supplierModalData.availableSuppliers.map((supplier, idx) => {
+                  const isCurrent = supplier.name === supplierModalData.currentSupplier;
+                  const currentPrice = supplierModalData.currentPrice || 0;
+                  const isExpensive = supplier.price > currentPrice;
+                  const isCheaper = supplier.price < currentPrice;
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleManualSupplierSelection(supplier.name, supplier.price)}
+                      disabled={isCurrent}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        isCurrent
+                          ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {supplier.name}
+                            {isCurrent && ' (Current)'}
+                          </div>
+                          {supplierModalData.currentPrice && !isCurrent && (
+                            <div className="text-xs mt-1">
+                              {isCheaper && <span className="text-green-600">💚 Cheaper</span>}
+                              {isExpensive && <span className="text-red-600">💸 More expensive</span>}
+                              {!isCheaper && !isExpensive && <span className="text-gray-500">Same price</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-medium text-gray-900">
+                            ${supplier.price.toFixed(2)}
+                          </div>
+                          {supplierModalData.currentPrice && !isCurrent && (
+                            <div className="text-xs text-gray-500">
+                              {isCheaper && `-$${(currentPrice - supplier.price).toFixed(2)}`}
+                              {isExpensive && `+$${(supplier.price - currentPrice).toFixed(2)}`}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="text-sm font-medium text-gray-900">
-                        ${supplier.price.toFixed(2)}
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="space-y-3">
-                <button
-                  onClick={handleNoSupplier}
-                  className="w-full bg-gray-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-600 transition-colors"
-                >
-                  Mark as "No Supplier Found"
-                </button>
+      
                 
                 <button
                   onClick={() => {

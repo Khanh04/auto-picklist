@@ -70,18 +70,34 @@ router.post('/',
 
 /**
  * GET /api/items/:productId/suppliers
- * Get all suppliers for a specific product
+ * Get all suppliers for a specific product for supplier switching
  */
 router.get('/:productId/suppliers',
     validateParams({ productId: { type: 'id' } }),
     asyncHandler(async (req, res) => {
         const { productId } = req.params;
-        
+
         const suppliers = await productRepository.getSuppliersByProductId(productId);
-        
+
+        if (!suppliers || suppliers.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'No suppliers available for this product'
+            });
+        }
+
+        // Format suppliers for frontend consumption
+        const formattedSuppliers = suppliers.map(supplier => ({
+            name: supplier.supplier_name,
+            price: parseFloat(supplier.price),
+            inStock: true // Default to true since we don't track stock status
+        }));
+
         res.json({
             success: true,
-            suppliers
+            data: {
+                availableSuppliers: formattedSuppliers
+            }
         });
     })
 );
