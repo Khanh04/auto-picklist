@@ -118,14 +118,44 @@ class ApiClient {
   }
 
   /**
+   * Parse file and return order items for intelligent processing
+   */
+  async parseFileForItems(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return this.post('/api/picklist/parse', formData);
+  }
+
+  /**
    * Upload file for picklist generation
    */
   async uploadPicklist(file, useDatabase = true) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('useDatabase', useDatabase.toString());
-    
+
     return this.post('/api/picklist/upload', formData);
+  }
+
+  /**
+   * Upload file and generate intelligent picklist with user-first supplier selection
+   */
+  async uploadFileIntelligent(file) {
+    // First, parse the file to get order items
+    const parseResult = await this.parseFileForItems(file);
+    const { orderItems } = parseResult;
+
+    // Then generate intelligent picklist
+    const picklistResult = await this.generateIntelligentPicklist(orderItems);
+
+    // Return combined result with filename for compatibility
+    return {
+      ...picklistResult,
+      filename: parseResult.filename,
+      useDatabase: true,
+      intelligent: true
+    };
   }
 
   /**
@@ -173,6 +203,60 @@ class ApiClient {
 
   async clearSessionPicklist() {
     return this.delete('/api/session/picklist');
+  }
+
+  /**
+   * Enhanced intelligent picklist generation with user-first supplier selection
+   */
+  async generateIntelligentPicklist(orderItems) {
+    return this.post('/api/supplier-preferences/intelligent-picklist', { orderItems });
+  }
+
+  /**
+   * Update supplier selection and learn user preference
+   */
+  async updateSupplierSelection(originalItem, newSupplierId, matchedProductId = null) {
+    return this.post('/api/supplier-preferences/update-selection', {
+      originalItem,
+      newSupplierId,
+      matchedProductId
+    });
+  }
+
+  /**
+   * Store multiple supplier preferences from shopping list
+   */
+  async storeSupplierPreferences(preferences) {
+    return this.post('/api/supplier-preferences/store-batch', { preferences });
+  }
+
+  /**
+   * Get supplier preference for a specific item
+   */
+  async getSupplierPreference(originalItem, matchedProductId = null) {
+    const params = matchedProductId ? `?matchedProductId=${matchedProductId}` : '';
+    return this.get(`/api/supplier-preferences/${encodeURIComponent(originalItem)}${params}`);
+  }
+
+  /**
+   * Get preferences summary for multiple items
+   */
+  async getPreferencesSummary(items) {
+    return this.post('/api/supplier-preferences/summary/items', { items });
+  }
+
+  /**
+   * Get all supplier preferences
+   */
+  async getAllSupplierPreferences() {
+    return this.get('/api/supplier-preferences/all');
+  }
+
+  /**
+   * Get supplier preference statistics
+   */
+  async getSupplierPreferenceStats() {
+    return this.get('/api/supplier-preferences/stats');
   }
 }
 

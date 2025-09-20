@@ -29,6 +29,45 @@ const upload = multer({
 });
 
 /**
+ * POST /api/picklist/parse
+ * Parse file and return order items for intelligent processing
+ */
+router.post('/parse',
+    upload.single('file'),
+    validateFileUpload({
+        required: true,
+        allowedTypes: ['text/csv', 'application/pdf'],
+        maxSize: process.env.MAX_FILE_SIZE || 5 * 1024 * 1024
+    }),
+    enhancedAsyncHandler(async (req, res) => {
+        const file = req.file;
+
+        if (!file) {
+            throw createValidationError(['file'], 'No file uploaded');
+        }
+
+        const app = new AutoPicklistApp();
+        let orderItems;
+
+        if (file.mimetype === 'application/pdf') {
+            orderItems = await app.parsePDF(file.path);
+        } else if (file.mimetype === 'text/csv') {
+            orderItems = await app.parseCSV(file.path);
+        } else {
+            throw createValidationError(['file'], 'Unsupported file type');
+        }
+
+        sendSuccessResponse(req, res, {
+            orderItems,
+            filename: file.originalname,
+            itemCount: orderItems.length
+        }, {
+            message: `Successfully parsed ${orderItems.length} items from ${file.originalname}`
+        });
+    })
+);
+
+/**
  * POST /api/picklist/upload
  * Upload file and generate picklist
  */

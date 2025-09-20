@@ -1,14 +1,18 @@
 const MatchingService = require('./MatchingService');
+const UserFirstMatchingService = require('./UserFirstMatchingService');
 const PreferenceRepository = require('../repositories/PreferenceRepository');
+const SupplierPreferenceRepository = require('../repositories/SupplierPreferenceRepository');
 
 class PicklistService {
     constructor() {
         this.matchingService = new MatchingService();
+        this.userFirstMatchingService = new UserFirstMatchingService();
         this.preferenceRepository = new PreferenceRepository();
+        this.supplierPreferenceRepository = new SupplierPreferenceRepository();
     }
 
     /**
-     * Create a picklist from order items using database matching
+     * Create a picklist from order items using database matching (legacy method)
      * @param {Array} orderItems - Array of {item, quantity}
      * @returns {Promise<Array>} Generated picklist
      */
@@ -17,7 +21,7 @@ class PicklistService {
 
         for (const orderItem of orderItems) {
             const matchResult = await this.matchingService.matchWithPreferences(orderItem.item);
-            
+
             const picklistItem = {
                 quantity: orderItem.quantity,
                 item: orderItem.item,
@@ -39,7 +43,22 @@ class PicklistService {
     }
 
     /**
-     * Store user preferences from picklist selections
+     * Create intelligent picklist with backend supplier selection (user-first approach)
+     * @param {Array} orderItems - Array of {item, quantity}
+     * @returns {Promise<Array>} Complete picklist with suppliers selected
+     */
+    async createIntelligentPicklist(orderItems) {
+        console.log(`🎯 Creating intelligent picklist for ${orderItems.length} items`);
+
+        // Use the new UserFirstMatchingService for complete backend processing
+        const picklist = await this.userFirstMatchingService.createIntelligentPicklist(orderItems);
+
+        console.log(`✅ Intelligent picklist completed with ${picklist.length} items`);
+        return picklist;
+    }
+
+    /**
+     * Store user preferences from picklist selections (legacy method)
      * @param {Array} preferences - Array of {originalItem, matchedProductId}
      * @returns {Promise<Array>} Stored preferences
      */
@@ -53,12 +72,46 @@ class PicklistService {
 
         // Store preferences in batch
         const storedPreferences = await this.preferenceRepository.batchUpsert(preferences);
-        
+
         return storedPreferences;
     }
 
     /**
-     * Calculate picklist summary statistics
+     * Store supplier preferences from user selections
+     * @param {Array} supplierPreferences - Array of {originalItem, supplierId, matchedProductId}
+     * @returns {Promise<Array>} Stored supplier preferences
+     */
+    async storeSupplierPreferences(supplierPreferences) {
+        if (!supplierPreferences || !Array.isArray(supplierPreferences) || supplierPreferences.length === 0) {
+            throw new Error('Supplier preferences array is required');
+        }
+
+        console.log(`📝 Storing ${supplierPreferences.length} supplier preferences`);
+
+        // Store supplier preferences in batch
+        const storedPreferences = await this.supplierPreferenceRepository.batchUpsert(supplierPreferences);
+
+        console.log(`✅ Stored ${storedPreferences.length} supplier preferences`);
+        return storedPreferences;
+    }
+
+    /**
+     * Update a single supplier selection and learn from user change
+     * @param {string} originalItem - Original item name
+     * @param {number} newSupplierId - New supplier ID
+     * @param {number} matchedProductId - Optional matched product ID
+     * @returns {Promise<Object>} Updated details
+     */
+    async updateSupplierSelection(originalItem, newSupplierId, matchedProductId = null) {
+        return await this.userFirstMatchingService.updateSupplierSelection(
+            originalItem,
+            newSupplierId,
+            matchedProductId
+        );
+    }
+
+    /**
+     * Calculate enhanced picklist summary statistics
      * @param {Array} picklist - Picklist items
      * @returns {Object} Summary with totals and statistics
      */
@@ -69,12 +122,18 @@ class PicklistService {
             totalPrice: 0,
             supplierBreakdown: {},
             unmatchedItems: 0,
-            preferenceMatches: 0
+            preferenceMatches: 0,
+            userPreferredItems: 0,
+            systemOptimizedItems: 0,
+            averageConfidence: 0
         };
+
+        let totalConfidence = 0;
+        let confidenceCount = 0;
 
         picklist.forEach(item => {
             summary.totalQuantity += parseInt(item.quantity) || 0;
-            
+
             const price = parseFloat(item.totalPrice) || 0;
             summary.totalPrice += price;
 
@@ -86,11 +145,32 @@ class PicklistService {
                 summary.unmatchedItems++;
             }
 
-            // Count preference matches
+            // Count legacy preference matches
             if (item.isPreference) {
                 summary.preferenceMatches++;
             }
+
+            // Count enhanced supplier decision types
+            if (item.supplierDecision) {
+                if (item.supplierDecision.isUserPreferred) {
+                    summary.userPreferredItems++;
+                } else {
+                    summary.systemOptimizedItems++;
+                }
+
+                // Calculate average confidence
+                if (item.supplierDecision.confidence) {
+                    const confidenceScore = item.supplierDecision.confidence === 'high' ? 1.0 :
+                                           item.supplierDecision.confidence === 'medium' ? 0.7 : 0.4;
+                    totalConfidence += confidenceScore;
+                    confidenceCount++;
+                }
+            }
         });
+
+        // Calculate average confidence
+        summary.averageConfidence = confidenceCount > 0 ?
+            parseFloat((totalConfidence / confidenceCount).toFixed(2)) : 0;
 
         // Round total price
         summary.totalPrice = parseFloat(summary.totalPrice.toFixed(2));
@@ -125,8 +205,13 @@ class PicklistService {
                 warnings.push(`Item ${index + 1}: back order for "${item.item}"`);
             }
 
-            if (item.unitPrice === 'No price found') {
+            if (item.unitPrice === 'No price found' || item.unitPrice === 'Error') {
                 warnings.push(`Item ${index + 1}: No price found for "${item.item}"`);
+            }
+
+            // Enhanced validation for supplier decision metadata
+            if (item.supplierDecision && item.supplierDecision.confidence === 'low') {
+                warnings.push(`Item ${index + 1}: Low confidence match for "${item.item}"`);
             }
         });
 

@@ -17,6 +17,7 @@ const { enhancedGlobalErrorHandler, enhancedNotFoundHandler } = require('./src/m
 const itemsRoutes = require('./src/routes/items');
 const suppliersRoutes = require('./src/routes/suppliers');
 const preferencesRoutes = require('./src/routes/preferences');
+const supplierPreferencesRoutes = require('./src/routes/supplierPreferences');
 const picklistRoutes = require('./src/routes/picklist');
 const shoppingListRoutes = require('./src/routes/shoppingList');
 const databaseRoutes = require('./src/routes/database');
@@ -133,6 +134,7 @@ app.use(requestLogger);
 app.use('/api/items', itemsRoutes);
 app.use('/api/suppliers', suppliersRoutes);
 app.use('/api/preferences', preferencesRoutes);
+app.use('/api/supplier-preferences', supplierPreferencesRoutes);
 app.use('/api/picklist', picklistRoutes);
 app.use('/api/shopping-list', shoppingListRoutes);
 app.use('/api/database', databaseRoutes);
@@ -270,8 +272,9 @@ app.get('/api', (req, res) => {
         endpoints: {
             health: '/health',
             items: '/api/items',
-            suppliers: '/api/suppliers', 
+            suppliers: '/api/suppliers',
             preferences: '/api/preferences',
+            supplierPreferences: '/api/supplier-preferences',
             picklist: '/api/picklist'
         },
         features: config.features
@@ -294,7 +297,7 @@ app.get('*', (req, res) => {
 
 // Error handling middleware (must be last)
 app.use(enhancedNotFoundHandler);
-app.use(enhancedGlobalErrorHandler);
+app.use(globalErrorHandler);
 
 // Create HTTP server
 const server = http.createServer(app);

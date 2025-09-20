@@ -53,7 +53,7 @@ function PicklistHeader({ results, summary }) {
       )}
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-6">
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-blue-600">{summary.totalItems}</div>
           <div className="text-sm text-blue-700">Total Items</div>
@@ -62,15 +62,32 @@ function PicklistHeader({ results, summary }) {
           <div className="text-2xl font-bold text-green-600">{summary.itemsWithSuppliers}</div>
           <div className="text-sm text-green-700">Items with Suppliers</div>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg">
-          <div className="text-2xl font-bold text-yellow-600 flex items-center gap-1">
-            ⭐ {summary.preferenceMatches}
+        {(summary.productPreferences > 0 || summary.supplierPreferences > 0) ? (
+          <>
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">
+                🎯 {summary.productPreferences || 0}
+              </div>
+              <div className="text-sm text-blue-700">Product Matches</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">
+                ⭐ {summary.supplierPreferences || 0}
+              </div>
+              <div className="text-sm text-purple-700">Supplier Choices</div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-yellow-600 flex items-center gap-1">
+              ⭐ {summary.preferenceMatches}
+            </div>
+            <div className="text-sm text-yellow-700">Preference Matches</div>
           </div>
-          <div className="text-sm text-yellow-700">Preference Matches</div>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <div className="text-2xl font-bold text-purple-600">${summary.totalCost.toFixed(2)}</div>
-          <div className="text-sm text-purple-700">Estimated Total</div>
+        )}
+        <div className="bg-indigo-50 p-4 rounded-lg">
+          <div className="text-2xl font-bold text-indigo-600">${summary.totalCost.toFixed(2)}</div>
+          <div className="text-sm text-indigo-700">Estimated Total</div>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { devLog } from '../utils/logger'
+import apiClient from '../utils/apiClient'
 
 export function usePicklistOperations(
   currentPicklist,
@@ -106,6 +107,12 @@ export function usePicklistOperations(
         if (selectedSupplier) {
           changes.unitPrice = selectedSupplier.price
           changes.totalPrice = (selectedSupplier.price * currentItem.quantity).toFixed(2)
+
+          // Learn supplier preference if this is a user manual change
+          // Only learn if the new selection is different from the system's original selection
+          if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
+            learnSupplierPreference(currentItem.originalItem, selectedSupplier.supplier_id, currentItem.matchedItemId)
+          }
         }
       } else if (!currentItem.manualOverride) {
         // Reset price if no specific supplier data available and not manually overridden
@@ -194,6 +201,11 @@ export function usePicklistOperations(
       }
 
       updates.push({ index, changes })
+
+      // Learn supplier preference for each item if this is a change from system selection
+      if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
+        learnSupplierPreference(currentItem.originalItem, selectedSupplier.supplier_id, currentItem.matchedItemId)
+      }
     }
 
     // Use bulk update from centralized state management
@@ -216,8 +228,22 @@ export function usePicklistOperations(
       item && item.selectedSupplier !== 'back order'
     ).length
 
-    const preferenceMatches = currentPicklist.filter(item =>
+    // Count legacy product matching preferences
+    const productPreferences = currentPicklist.filter(item =>
       item.isPreference === true
+    ).length
+
+    // Count supplier preferences
+    const supplierPreferences = currentPicklist.filter(item =>
+      item.supplierDecision?.isUserPreferred === true
+    ).length
+
+    // Total preference matches (for backward compatibility)
+    const preferenceMatches = productPreferences + supplierPreferences
+
+    // Count system-optimized items
+    const systemOptimizedItems = currentPicklist.filter(item =>
+      item.supplierDecision && !item.supplierDecision.isUserPreferred
     ).length
 
     const totalCost = currentPicklist.reduce((sum, item) => {
@@ -228,8 +254,23 @@ export function usePicklistOperations(
     return {
       totalItems: currentPicklist.length,
       itemsWithSuppliers,
-      preferenceMatches,
+      preferenceMatches, // Total for backward compatibility
+      productPreferences, // Product matching preferences
+      supplierPreferences, // Supplier selection preferences
+      systemOptimizedItems,
       totalCost
+    }
+  }
+
+  // Helper function to learn supplier preference (called immediately when user changes supplier)
+  const learnSupplierPreference = async (originalItem, supplierId, matchedProductId = null) => {
+    try {
+      devLog(`Learning supplier preference: "${originalItem}" → supplier ${supplierId}`)
+      await apiClient.updateSupplierSelection(originalItem, supplierId, matchedProductId)
+      devLog(`Supplier preference learned successfully`)
+    } catch (error) {
+      console.warn('Failed to learn supplier preference:', error)
+      // Don't block UI operation if preference learning fails
     }
   }
 
@@ -243,7 +284,7 @@ export function usePicklistOperations(
         matchedProductId: item.matchedItemId
       }))
 
-    // Store preferences if any manual overrides were made
+    // Store legacy preferences if any manual overrides were made
     if (preferences.length > 0) {
       try {
         const response = await fetch('/api/preferences', {
@@ -255,10 +296,45 @@ export function usePicklistOperations(
         })
 
         if (!response.ok) {
-          console.error('Failed to store preferences - server error:', response.status)
+          console.error('Failed to store legacy preferences - server error:', response.status)
+        } else {
+          devLog(`Stored ${preferences.length} legacy product matching preferences`)
         }
       } catch (prefError) {
-        console.warn('Failed to store preferences - network error:', prefError)
+        console.warn('Failed to store legacy preferences - network error:', prefError)
+        // Don't block operation if preference storage fails
+      }
+    }
+
+    // Also collect and store any remaining supplier preferences
+    // (for cases where user changed suppliers but we missed the immediate learning)
+    const supplierPreferences = currentPicklist
+      .filter(item =>
+        item.manualOverride &&
+        item.selectedSupplier !== 'back order' &&
+        item.supplierDecision &&
+        // Only store if this was originally a system decision (not already a user preference)
+        !item.supplierDecision.isUserPreferred
+      )
+      .map(item => {
+        // Find the supplier ID for the selected supplier
+        const suppliers = productSuppliers[item.matchedItemId] || []
+        const selectedSupplier = suppliers.find(s => s.supplier_name === item.selectedSupplier)
+
+        return {
+          originalItem: item.originalItem,
+          supplierId: selectedSupplier?.supplier_id,
+          matchedProductId: item.matchedItemId
+        }
+      })
+      .filter(pref => pref.supplierId) // Only include valid supplier IDs
+
+    if (supplierPreferences.length > 0) {
+      try {
+        await apiClient.storeSupplierPreferences(supplierPreferences)
+        devLog(`Stored ${supplierPreferences.length} supplier preferences`)
+      } catch (error) {
+        console.warn('Failed to store supplier preferences:', error)
         // Don't block operation if preference storage fails
       }
     }

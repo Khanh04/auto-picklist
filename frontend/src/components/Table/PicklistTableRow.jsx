@@ -66,16 +66,24 @@ function PicklistTableRow({
               onSelectChange={onSelectChange}
             />
           </div>
-          {item.isPreference && (
-            <div className="flex justify-start">
+          <div className="flex flex-wrap gap-1 justify-start">
+            {item.isPreference && (
+              <span
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 whitespace-nowrap"
+                title={`Product matched by preference (used ${item.frequency || 1} time${(item.frequency || 1) === 1 ? '' : 's'} before)`}
+              >
+                🎯 Product Match
+              </span>
+            )}
+            {item.supplierDecision?.isUserPreferred && (
               <span
                 className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 whitespace-nowrap"
-                title={`Matched by preference (used ${item.frequency || 1} time${(item.frequency || 1) === 1 ? '' : 's'} before)`}
+                title={`Supplier selected by user preference: ${item.supplierDecision.selectionReason} (confidence: ${item.supplierDecision.confidence})`}
               >
-                ⭐ Preference
+                ⭐ Supplier Choice
               </span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </td>
       <td className="border border-gray-200 w-32">

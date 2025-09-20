@@ -31,18 +31,30 @@ function AppContent() {
   const [error, setError] = useState(null)
 
 
-  const handleFileUpload = async (file) => {
+  const handleFileUpload = async (file, useIntelligent = true) => {
     navigate('/processing')
     setError(null)
 
     try {
-      const result = await apiClient.uploadPicklist(file, true)
-      devLog('Upload result:', result)
+      let result;
+
+      if (useIntelligent) {
+        // Use new intelligent picklist generation with user-first supplier selection
+        devLog('Using intelligent picklist generation with user preferences...')
+        result = await apiClient.uploadFileIntelligent(file)
+        devLog('Intelligent upload result:', result)
+      } else {
+        // Use legacy approach
+        devLog('Using legacy picklist generation...')
+        result = await apiClient.uploadPicklist(file, true)
+        devLog('Legacy upload result:', result)
+      }
+
       devLog('Picklist items:', result.picklist)
-      
+
       // Wrap result to maintain existing component expectations
       setResults({ success: true, ...result })
-      
+
       // Clear database session when new file is uploaded
       apiClient.clearSessionPicklist().catch(console.warn)
       navigate('/')
