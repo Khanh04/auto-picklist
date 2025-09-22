@@ -275,7 +275,3 @@ The application follows a modular architecture:
 - **config.js**: Connection pooling and PostgreSQL configuration
 - **setup-database.js**: Schema creation and indexing
 - **import-excel-data.js**: Migration utility for Excel-to-PostgreSQL
-
-## License
-
-MIT
