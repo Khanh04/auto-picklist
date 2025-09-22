@@ -140,24 +140,29 @@ class UserFirstMatchingService extends MatchingService {
             }
         }
 
-        // Step 2: No user preference - use system optimization
-        console.log(`🤖 No user preference for "${originalItem}", using system optimization`);
-        const systemChoice = await this.findBestSupplier(originalItem);
+        // Step 2: No user preference - use system optimization for the specific matched product
+        console.log(`🤖 No user preference for "${originalItem}", using system optimization for product ${productId}`);
 
-        if (systemChoice.supplier && systemChoice.supplier !== 'back order') {
-            const supplierDetails = await this.getSupplierByName(systemChoice.supplier);
+        if (productId) {
+            // Get all suppliers for the specific matched product
+            const productSuppliers = await this.productRepository.getSuppliersByProductId(productId);
 
-            return {
-                supplier: {
-                    id: supplierDetails?.id || null,
-                    name: systemChoice.supplier
-                },
-                price: systemChoice.price,
-                reason: 'Best price available',
-                isUserPreferred: false,
-                alternatives: await this.getAlternativeSuppliers(productId),
-                preferenceStrength: 0
-            };
+            if (productSuppliers.length > 0) {
+                // Select the cheapest supplier for this specific product
+                const bestSupplier = productSuppliers[0]; // Already sorted by price ASC
+
+                return {
+                    supplier: {
+                        id: bestSupplier.supplier_id,
+                        name: bestSupplier.supplier_name
+                    },
+                    price: bestSupplier.price,
+                    reason: `Best price for matched product (${productSuppliers.length} suppliers available)`,
+                    isUserPreferred: false,
+                    alternatives: await this.getAlternativeSuppliers(productId, bestSupplier.supplier_id),
+                    preferenceStrength: 0
+                };
+            }
         }
 
         // Step 3: Fallback to "back order"
