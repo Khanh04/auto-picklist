@@ -82,8 +82,11 @@ export function usePicklistData(currentPicklist, initialDataFetched, setInitialD
     }
 
     try {
-      const data = await apiClient.get(`/api/items/${productId}/suppliers`)
-      const suppliers = data.suppliers || []
+      const response = await apiClient.get(`/api/items/${productId}/suppliers`)
+
+      // Fix: ApiClient already normalizes the response, so access availableSuppliers directly
+      const suppliers = response.availableSuppliers || []
+
       setProductSuppliers(prev => ({ ...prev, [productId]: suppliers }))
       return suppliers
     } catch (error) {

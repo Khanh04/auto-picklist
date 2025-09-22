@@ -88,6 +88,7 @@ router.get('/:productId/suppliers',
 
         // Format suppliers for frontend consumption
         const formattedSuppliers = suppliers.map(supplier => ({
+            id: supplier.supplier_id,
             name: supplier.supplier_name,
             price: parseFloat(supplier.price),
             inStock: true // Default to true since we don't track stock status

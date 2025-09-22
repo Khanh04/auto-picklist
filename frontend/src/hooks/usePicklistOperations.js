@@ -94,6 +94,7 @@ export function usePicklistOperations(
     } else if (field === 'selectedSupplier') {
       const currentItem = currentPicklist[index]
       changes.selectedSupplier = value
+      changes.manualOverride = true // Mark as manually changed so preference learning can detect this change
 
       // Handle "back order" case
       if (value === 'back order') {
@@ -102,7 +103,7 @@ export function usePicklistOperations(
       } else if (currentItem.matchedItemId && productSuppliers[currentItem.matchedItemId]) {
         // If there's a matched item, update price based on selected supplier
         const suppliers = productSuppliers[currentItem.matchedItemId]
-        const selectedSupplier = suppliers.find(s => s.supplier_name === value)
+        const selectedSupplier = suppliers.find(s => s.name === value)
 
         if (selectedSupplier) {
           changes.unitPrice = selectedSupplier.price
@@ -111,7 +112,7 @@ export function usePicklistOperations(
           // Learn supplier preference if this is a user manual change
           // Only learn if the new selection is different from the system's original selection
           if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
-            learnSupplierPreference(currentItem.originalItem, selectedSupplier.supplier_id, currentItem.matchedItemId)
+            learnSupplierPreference(currentItem.originalItem, selectedSupplier.id, currentItem.matchedItemId)
           }
         }
       } else if (!currentItem.manualOverride) {
@@ -319,11 +320,11 @@ export function usePicklistOperations(
       .map(item => {
         // Find the supplier ID for the selected supplier
         const suppliers = productSuppliers[item.matchedItemId] || []
-        const selectedSupplier = suppliers.find(s => s.supplier_name === item.selectedSupplier)
+        const selectedSupplier = suppliers.find(s => s.name === item.selectedSupplier)
 
         return {
           originalItem: item.originalItem,
-          supplierId: selectedSupplier?.supplier_id,
+          supplierId: selectedSupplier?.id,
           matchedProductId: item.matchedItemId
         }
       })

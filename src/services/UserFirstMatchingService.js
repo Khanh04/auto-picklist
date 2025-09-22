@@ -135,6 +135,8 @@ class UserFirstMatchingService extends MatchingService {
                     alternatives: await this.getAlternativeSuppliers(productId, userPreference.preferred_supplier_id),
                     preferenceStrength: this.supplierPreferenceRepository.calculatePreferenceStrength(userPreference)
                 };
+            } else {
+                console.warn(`⚠️  User preferred supplier "${userPreference.supplier_name}" not available for "${originalItem}", falling back to system optimization`);
             }
         }
 
@@ -175,11 +177,19 @@ class UserFirstMatchingService extends MatchingService {
      * @private
      */
     async getSupplierDetails(supplierId, productId) {
-        if (!supplierId || !productId) return null;
+        if (!supplierId || !productId) {
+            console.warn(`⚠️  Invalid parameters for getSupplierDetails: supplierId=${supplierId}, productId=${productId}`);
+            return null;
+        }
 
         try {
             const suppliers = await this.productRepository.getSuppliersByProductId(productId);
-            return suppliers.find(s => s.supplier_id === supplierId) || null;
+            console.log(`🔍 Found ${suppliers.length} suppliers for product ${productId}, looking for supplier ${supplierId}`);
+            const found = suppliers.find(s => s.supplier_id === supplierId);
+            if (!found) {
+                console.warn(`⚠️  Supplier ${supplierId} not found among available suppliers: ${suppliers.map(s => `${s.supplier_id}:${s.supplier_name}`).join(', ')}`);
+            }
+            return found || null;
         } catch (error) {
             console.error('Error getting supplier details:', error.message);
             return null;
