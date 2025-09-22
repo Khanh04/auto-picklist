@@ -73,8 +73,6 @@ This starts both the Vite development server and the Express backend concurrentl
 
 ### 💻 Command Line Tool
 
-For batch processing and automation:
-
 ```bash
 npm start
 ```
