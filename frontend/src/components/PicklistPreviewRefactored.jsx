@@ -121,7 +121,7 @@ function PicklistPreviewRefactored({ results, onBack, onNavigate }) {
       const supplierSets = []
       for (const productId of selectedProductIds) {
         const suppliers = await fetchProductSuppliers(productId)
-        supplierSets.push(new Set(suppliers.map(s => s.supplier_name)))
+        supplierSets.push(new Set(suppliers.map(s => s.name)))
       }
 
       // Find intersection of all supplier sets
@@ -133,7 +133,7 @@ function PicklistPreviewRefactored({ results, onBack, onNavigate }) {
       if (commonSuppliers.size > 0) {
         const firstProductId = Array.from(selectedProductIds)[0]
         const allSuppliers = await fetchProductSuppliers(firstProductId)
-        return allSuppliers.filter(s => commonSuppliers.has(s.supplier_name))
+        return allSuppliers.filter(s => commonSuppliers.has(s.name))
       }
 
       return []

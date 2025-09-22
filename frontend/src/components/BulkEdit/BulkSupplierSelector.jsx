@@ -68,7 +68,7 @@ function BulkSupplierSelector({ selectedRows, currentPicklist, onSupplierChange,
             onClick={() => handleSupplierSelect(supplier)}
             className="text-left p-3 bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <div className="font-medium text-gray-900">{supplier.supplier_name}</div>
+            <div className="font-medium text-gray-900">{supplier.name}</div>
             <div className="text-sm text-green-600 font-semibold">${supplier.price}</div>
           </button>
         ))}

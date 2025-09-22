@@ -195,7 +195,7 @@ export function usePicklistOperations(
     for (const index of selectedRows) {
       const currentItem = currentPicklist[index]
       const changes = {
-        selectedSupplier: selectedSupplier.supplier_name,
+        selectedSupplier: selectedSupplier.name,
         unitPrice: selectedSupplier.price,
         totalPrice: (selectedSupplier.price * currentItem.quantity).toFixed(2),
         manualOverride: true // Mark as manually overridden
@@ -205,7 +205,7 @@ export function usePicklistOperations(
 
       // Learn supplier preference for each item if this is a change from system selection
       if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
-        learnSupplierPreference(currentItem.originalItem, selectedSupplier.supplier_id, currentItem.matchedItemId)
+        learnSupplierPreference(currentItem.originalItem, selectedSupplier.id, currentItem.matchedItemId)
       }
     }
 
