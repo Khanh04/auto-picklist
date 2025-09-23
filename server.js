@@ -22,7 +22,6 @@ const picklistRoutes = require('./src/routes/picklist');
 const shoppingListRoutes = require('./src/routes/shoppingList');
 const databaseRoutes = require('./src/routes/database');
 const multiCsvRoutes = require('./src/routes/multiCsv');
-const sessionRoutes = require('./src/routes/session');
 
 const app = express();
 const port = config.server.port;
@@ -139,7 +138,6 @@ app.use('/api/picklist', picklistRoutes);
 app.use('/api/shopping-list', shoppingListRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/multi-csv', multiCsvRoutes);
-app.use('/api/session', sessionRoutes);
 
 // Legacy API endpoints for backward compatibility
 app.get('/api/get-preference/:originalItem', (req, res, next) => {

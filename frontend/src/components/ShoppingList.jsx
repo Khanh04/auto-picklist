@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useWebSocket from '../hooks/useWebSocket';
 import { devLog } from '../utils/logger';
 
-function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading = false, onPicklistUpdate = null }) {
+function ShoppingList({ onBack, shareId, loading = false, onPicklistUpdate = null }) {
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [groupedItems, setGroupedItems] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
@@ -13,7 +13,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [listTitle, setListTitle] = useState('Shopping List');
   const [connectionStatus, setConnectionStatus] = useState('');
-  const [currentPicklist, setCurrentPicklist] = useState(propPicklist || []);
+  const [currentPicklist, setCurrentPicklist] = useState([]);
   const [switchingSupplier, setSwitchingSupplier] = useState(new Set());
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [supplierModalData, setSupplierModalData] = useState(null);
@@ -96,39 +96,21 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     });
   };
 
-  // Persistence layer - handles saving to appropriate storage
+  // Persistence layer - saves to database (all lists are now shared)
   const persistPicklistData = async (picklistData) => {
     try {
-      if (shareId) {
-        // Shared lists: save to shared database
-        const response = await fetch(`/api/shopping-list/share/${shareId}/picklist`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ picklist: picklistData })
-        });
-        
-        if (response.ok) {
-          devLog('✅ Saved shared shopping list to database');
-          return true;
-        } else {
-          console.error('❌ Failed to save shared shopping list to database');
-          return false;
-        }
+      const response = await fetch(`/api/shopping-list/share/${shareId}/picklist`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ picklist: picklistData })
+      });
+
+      if (response.ok) {
+        devLog('✅ Saved shopping list to database');
+        return true;
       } else {
-        // Non-shared lists: save to session storage
-        const response = await fetch('/api/session/picklist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ picklist: picklistData })
-        });
-        
-        if (response.ok) {
-          devLog('✅ Saved shopping list to session storage');
-          return true;
-        } else {
-          console.error('❌ Failed to save shopping list to session storage');
-          return false;
-        }
+        console.error('❌ Failed to save shopping list to database');
+        return false;
       }
     } catch (error) {
       console.error('❌ Persistence error:', error);
@@ -139,59 +121,45 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   // Initialize WebSocket connection for shared lists
   const { isConnected, connectionError, subscribe, broadcastUpdate } = useWebSocket(shareId);
 
-  // Initialize picklist data - for shared lists, fetch from API; for main lists, use props
+  // Initialize picklist data from database (all lists are now shared)
   useEffect(() => {
     const loadPicklistData = async () => {
-      if (shareId) {
-        // For shared lists, fetch data from API only once
-        setIsLoading(true);
-        setError(null);
-        try {
-          const response = await fetch(`/api/shopping-list/share/${shareId}`);
-          const result = await response.json();
-          
-          if (result.success && result.data && result.data.picklist) {
-            setCurrentPicklist(result.data.picklist);
-            
-            // Restore partial quantities from database
-            const newPartialQuantities = new Map();
-            result.data.picklist.forEach((item, index) => {
-              if (item.purchasedQuantity && item.purchasedQuantity > 0) {
-                newPartialQuantities.set(index, item.purchasedQuantity);
-              }
-            });
-            setPartialQuantities(newPartialQuantities);
-          } else {
-            setError(result.error || 'Failed to load shopping list');
-          }
-        } catch (error) {
-          console.error('Error fetching shared list:', error);
-          setError('Network error while loading shopping list');
-        } finally {
-          setIsLoading(false);
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/shopping-list/share/${shareId}`);
+        const result = await response.json();
+
+        if (result.success && result.data && result.data.picklist) {
+          setCurrentPicklist(result.data.picklist);
+
+          // Restore partial quantities from database
+          const newPartialQuantities = new Map();
+          result.data.picklist.forEach((item, index) => {
+            if (item.purchasedQuantity && item.purchasedQuantity > 0) {
+              newPartialQuantities.set(index, item.purchasedQuantity);
+            }
+          });
+          setPartialQuantities(newPartialQuantities);
+        } else {
+          setError(result.error || 'Failed to load shopping list');
         }
-      } else {
-        // For main lists, use the provided picklist prop
-        setCurrentPicklist(propPicklist || []);
+      } catch (error) {
+        console.error('Error fetching shopping list:', error);
+        setError('Network error while loading shopping list');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    // Only load data if we have a shareId and haven't loaded yet, or if there's no shareId
-    if ((shareId && currentPicklist.length === 0) || !shareId) {
+    // Load data if we have a shareId and haven't loaded yet
+    if (shareId && currentPicklist.length === 0) {
       loadPicklistData();
     }
-  }, [shareId]); // Removed propPicklist from dependencies to prevent re-fetching
+  }, [shareId, currentPicklist.length]);
 
-  // Handle prop picklist changes for non-shared lists only
+  // Set up WebSocket event handlers
   useEffect(() => {
-    if (!shareId && propPicklist) {
-      setCurrentPicklist(propPicklist);
-    }
-  }, [propPicklist, shareId]);
-
-  // Set up WebSocket event handlers for shared lists
-  useEffect(() => {
-    if (!shareId) return;
 
     // Handle real-time item toggle updates from other users (legacy handler)
     // NOTE: This is now handled by the unified 'picklist_updated' handler below
@@ -245,15 +213,10 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       unsubscribeUpdate();
       unsubscribeError();
     };
-  }, [shareId, subscribe]);
+  }, [subscribe]);
 
   // Update connection status display
   useEffect(() => {
-    if (!shareId) {
-      setConnectionStatus('');
-      return;
-    }
-
     if (connectionError) {
       setConnectionStatus('Connection failed');
     } else if (isConnected) {
@@ -261,35 +224,21 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     } else {
       setConnectionStatus('Connecting...');
     }
-  }, [shareId, isConnected, connectionError]);
+  }, [isConnected, connectionError]);
 
-  // Load checked items - from database for shared lists, localStorage for local lists
+  // Load checked items from database (all lists are now shared)
   useEffect(() => {
-    if (shareId) {
-      // For shared lists, calculate checked state from quantities
-      const checkedIndices = new Set();
-      if (currentPicklist) {
-        currentPicklist.forEach((item, index) => {
-          if (isItemChecked(item)) {
-            checkedIndices.add(index);
-          }
-        });
-        setCheckedItems(checkedIndices);
-      }
-    } else {
-      // For local lists, use localStorage
-      const storageKey = 'shopping-list-checked';
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          const savedSet = new Set(JSON.parse(saved));
-          setCheckedItems(savedSet);
-        } catch (error) {
-          console.error('Error loading saved checked items:', error);
+    // Calculate checked state from quantities
+    const checkedIndices = new Set();
+    if (currentPicklist) {
+      currentPicklist.forEach((item, index) => {
+        if (isItemChecked(item)) {
+          checkedIndices.add(index);
         }
-      }
+      });
+      setCheckedItems(checkedIndices);
     }
-  }, [shareId, currentPicklist]);
+  }, [currentPicklist]);
 
   // Group items by supplier and calculate costs
   useEffect(() => {
@@ -374,13 +323,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     setCheckedCost(checked);
   }, [currentPicklist, checkedItems, partialQuantities]);
 
-  // Save checked items to localStorage (only for local lists)
-  useEffect(() => {
-    if (!shareId) {
-      const storageKey = 'shopping-list-checked';
-      localStorage.setItem(storageKey, JSON.stringify([...checkedItems]));
-    }
-  }, [checkedItems, shareId]);
 
   const handleItemCheck = async (index) => {
     const item = currentPicklist[index];
@@ -418,8 +360,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     }
     setCheckedItems(newCheckedItems);
 
-    // For shared lists, use the dedicated item check API
-    if (shareId) {
+    // Use the dedicated item check API to sync to database
       try {
         // Send purchased quantity to backend
         const item = currentPicklist[index];
@@ -491,10 +432,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         // Revert local state on failure
         setCheckedItems(checkedItems);
       }
-    } else {
-      // For non-shared lists, just update localStorage (existing behavior)
-      devLog(`💾 Saved item ${index} check state to localStorage: ${willBeChecked ? 'checked' : 'unchecked'}`);
-    }
   };
 
   const handleClearAll = async () => {
@@ -504,9 +441,8 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
       // Clear local state immediately
       setCheckedItems(new Set());
 
-      // For shared lists, update each item individually via API
-      if (shareId) {
-        let allSuccessful = true;
+      // Update each item individually via API
+      let allSuccessful = true;
         
         try {
           // Update each checked item in the database
@@ -561,10 +497,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           // Revert local state on failure
           setCheckedItems(previousCheckedItems);
         }
-      } else {
-        // For non-shared lists, localStorage is already updated by useEffect
-        devLog(`💾 Cleared all ${previousCheckedItems.size} checked items in localStorage`);
-      }
     }
   };
 
@@ -583,9 +515,8 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     });
     setCheckedItems(newCheckedItems);
 
-    // For shared lists, update each item individually via API
-    if (shareId) {
-      let allSuccessful = true;
+    // Update each item individually via API
+    let allSuccessful = true;
       
       try {
         // Update each item in the database
@@ -646,10 +577,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
         // Revert local state on failure
         setCheckedItems(checkedItems);
       }
-    } else {
-      // For non-shared lists, localStorage is already updated by useEffect
-      devLog(`💾 ${willBeChecked ? 'Checked' : 'Unchecked'} ${supplierItems.length} supplier items in localStorage`);
-    }
   };
 
   const getItemsCount = () => {
@@ -702,8 +629,7 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
     }
     setCheckedItems(newCheckedItems);
     
-    // Sync to database for shared lists
-    if (shareId) {
+    // Sync to database
       try {
         devLog(`🔍 Sending to database: purchasedQuantity=${newTotalPurchased} for item ${index}`);
         
@@ -750,11 +676,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
           return newMap;
         });
       }
-    } else {
-      // For main lists, store in localStorage
-      const storageKey = `checkedItems_main`;
-      localStorage.setItem(storageKey, JSON.stringify([...newCheckedItems]));
-    }
     
     // Close modal
     setShowQuantityModal(false);
@@ -888,10 +809,6 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      // First, ensure we have the latest state saved (for non-shared lists)
-      if (!shareId) {
-        await syncPicklistData(prevPicklist => prevPicklist, { suppressWebSocket: true });
-      }
 
       const response = await fetch('/api/shopping-list/share', {
         method: 'POST',
@@ -1037,16 +954,14 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Shared List Header Banner */}
-      {shareId && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 lg:px-8 py-2">
-          <div className="text-center max-w-6xl mx-auto">
-            <div className="text-sm md:text-base text-blue-600">📤 Shared Shopping List</div>
-            <div className="text-xs md:text-sm text-blue-500">
-              Real-time collaboration active
-            </div>
+      <div className="bg-blue-50 border-b border-blue-200 px-4 lg:px-8 py-2">
+        <div className="text-center max-w-6xl mx-auto">
+          <div className="text-sm md:text-base text-blue-600">📤 Shared Shopping List</div>
+          <div className="text-xs md:text-sm text-blue-500">
+            Real-time collaboration active
           </div>
         </div>
-      )}
+      </div>
 
       {/* Header - Fixed */}
       <div className="bg-white shadow-sm sticky top-0 z-10 border-b">
@@ -1056,19 +971,10 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
               onClick={onBack}
               className="text-blue-600 hover:text-blue-800 font-medium text-sm md:text-base"
             >
-              ← Back {shareId ? 'to Main App' : 'to Picklist'}
+              ← Back to Main App
             </button>
             <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Shopping List</h1>
             <div className="flex items-center gap-2 md:gap-3">
-              {!shareId && (
-                <button
-                  onClick={handleShare}
-                  disabled={isSharing}
-                  className="text-blue-600 hover:text-blue-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                >
-                  {isSharing ? '⏳' : '📤'} Share
-                </button>
-              )}
               <button
                 onClick={handleClearAll}
                 className="text-red-600 hover:text-red-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
@@ -1122,8 +1028,8 @@ function ShoppingList({ picklist: propPicklist, onBack, shareId = null, loading 
             Show completed items
           </label>
           
-          {/* Connection Status for Shared Lists */}
-          {shareId && connectionStatus && (
+          {/* Connection Status */}
+          {connectionStatus && (
             <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
               isConnected 
                 ? 'bg-green-100 text-green-700' 
