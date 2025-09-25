@@ -8,7 +8,6 @@ const http = require('http');
 const config = require('./src/config');
 const MigrationManager = require('./src/migrations/MigrationManager');
 const { globalErrorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
-const { rateLimit } = require('./src/middleware/validation');
 const { preventRequestBombing } = require('./src/middleware/secureValidation');
 const { requestContext, requestLogger } = require('./src/middleware/requestContext');
 const { enhancedGlobalErrorHandler, enhancedNotFoundHandler } = require('./src/middleware/enhancedErrorHandler');
@@ -90,14 +89,7 @@ app.use(preventRequestBombing({
     maxDepth: 10
 }));
 
-// Rate limiting
-if (config.isProduction()) {
-    app.use('/api/', rateLimit({
-        windowMs: config.security.rateLimitWindowMs,
-        maxRequests: config.security.rateLimitMaxRequests,
-        message: 'Too many requests from this IP, please try again later'
-    }));
-}
+// Rate limiting removed
 
 // CORS configuration
 app.use((req, res, next) => {
