@@ -193,57 +193,6 @@ const sanitizeInput = (fields = []) => {
     };
 };
 
-/**
- * Rate limiting middleware
- * @param {Object} options - Rate limiting options
- * @returns {Function} Express middleware function
- */
-const rateLimit = (options = {}) => {
-    const {
-        windowMs = 5 * 60 * 1000, // 15 minutes
-        maxRequests = 1000,
-        message = 'Too many requests from this IP'
-    } = options;
-
-    const requests = new Map();
-    const MAX_IPS = 10000; // Prevent memory leaks
-
-    return (req, res, next) => {
-        const ip = req.ip || req.connection.remoteAddress;
-        const now = Date.now();
-        const windowStart = now - windowMs;
-
-        // Clean old entries and prevent memory leaks
-        for (const [key, timestamps] of requests.entries()) {
-            const validTimestamps = timestamps.filter(ts => ts > windowStart);
-            if (validTimestamps.length === 0) {
-                requests.delete(key);
-            } else {
-                requests.set(key, validTimestamps);
-            }
-        }
-        
-        // Prevent memory leaks by limiting stored IPs
-        if (requests.size > MAX_IPS) {
-            const oldestKey = requests.keys().next().value;
-            requests.delete(oldestKey);
-        }
-
-        // Check current IP
-        const ipRequests = requests.get(ip) || [];
-        const validRequests = ipRequests.filter(ts => ts > windowStart);
-
-        if (validRequests.length >= maxRequests) {
-            return next(new AppError(message, 429));
-        }
-
-        // Add current request
-        validRequests.push(now);
-        requests.set(ip, validRequests);
-
-        next();
-    };
-};
 
 /**
  * Helper function to validate email format
@@ -259,6 +208,5 @@ module.exports = {
     validateFileUpload,
     validateBody,
     validateParams,
-    sanitizeInput,
-    rateLimit
+    sanitizeInput
 };
