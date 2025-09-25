@@ -190,20 +190,6 @@ class ApiClient {
     return this.put(`/api/shopping-list/share/${shareId}/picklist`, { picklist });
   }
 
-  /**
-   * Session picklist management
-   */
-  async getSessionPicklist() {
-    return this.get('/api/session/picklist');
-  }
-
-  async saveSessionPicklist(picklist) {
-    return this.post('/api/session/picklist', { picklist });
-  }
-
-  async clearSessionPicklist() {
-    return this.delete('/api/session/picklist');
-  }
 
   /**
    * Enhanced intelligent picklist generation with user-first supplier selection

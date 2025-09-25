@@ -9,13 +9,8 @@ describe('usePicklistPersistence', () => {
     fetch.mockClear();
   });
 
-  describe('when shareId is null (session storage)', () => {
-    test('should persist picklist to session storage successfully', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true })
-      });
-
+  describe('when shareId is null (no session storage)', () => {
+    test('should return error for persistence without shareId', async () => {
       const { result } = renderHook(() => usePicklistPersistence());
       const testPicklist = [{ id: 1, item: 'Apple', quantity: 2 }];
 
@@ -24,53 +19,11 @@ describe('usePicklistPersistence', () => {
         persistResult = await result.current.persistPicklist(testPicklist);
       });
 
-      expect(fetch).toHaveBeenCalledWith('/api/session/picklist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ picklist: testPicklist })
-      });
-      expect(persistResult).toEqual({ success: true });
+      expect(persistResult).toEqual({ success: false, error: 'No share ID provided - session storage removed' });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
-    test('should handle session storage persistence failure', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ success: false })
-      });
-
-      const { result } = renderHook(() => usePicklistPersistence());
-      const testPicklist = [{ id: 1, item: 'Apple', quantity: 2 }];
-
-      let persistResult;
-      await act(async () => {
-        persistResult = await result.current.persistPicklist(testPicklist);
-      });
-
-      expect(persistResult).toEqual({ success: false, error: 'Session save failed' });
-    });
-
-    test('should handle session storage network error', async () => {
-      const error = new Error('Network error');
-      fetch.mockRejectedValueOnce(error);
-
-      const { result } = renderHook(() => usePicklistPersistence());
-      const testPicklist = [{ id: 1, item: 'Apple', quantity: 2 }];
-
-      let persistResult;
-      await act(async () => {
-        persistResult = await result.current.persistPicklist(testPicklist);
-      });
-
-      expect(persistResult).toEqual({ success: false, error: 'Network error' });
-    });
-
-    test('should load picklist from session storage successfully', async () => {
-      const testPicklist = [{ id: 1, item: 'Apple', quantity: 2 }];
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, picklist: testPicklist })
-      });
-
+    test('should return error for loading without shareId', async () => {
       const { result } = renderHook(() => usePicklistPersistence());
 
       let loadResult;
@@ -78,41 +31,8 @@ describe('usePicklistPersistence', () => {
         loadResult = await result.current.loadPicklist();
       });
 
-      expect(fetch).toHaveBeenCalledWith('/api/session/picklist');
-      expect(loadResult).toEqual({ success: true, picklist: testPicklist });
-    });
-
-    test('should handle session storage load failure', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ success: false })
-      });
-
-      const { result } = renderHook(() => usePicklistPersistence());
-
-      let loadResult;
-      await act(async () => {
-        loadResult = await result.current.loadPicklist();
-      });
-
-      expect(loadResult).toEqual({ success: false, error: 'No session data found' });
-    });
-
-    test('should clear storage successfully', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true })
-      });
-
-      const { result } = renderHook(() => usePicklistPersistence());
-
-      let clearResult;
-      await act(async () => {
-        clearResult = await result.current.clearStorage();
-      });
-
-      expect(fetch).toHaveBeenCalledWith('/api/session/picklist', { method: 'DELETE' });
-      expect(clearResult).toEqual({ success: true });
+      expect(loadResult).toEqual({ success: false, error: 'No share ID provided - session storage removed' });
+      expect(fetch).not.toHaveBeenCalled();
     });
   });
 
@@ -199,23 +119,13 @@ describe('usePicklistPersistence', () => {
       const { result } = renderHook(() => usePicklistPersistence(null));
       const testPicklist = [{ id: 1, item: 'Apple', quantity: 2 }];
 
-      // This will use session storage, so let's test with an undefined shareId
-      const { result: resultWithUndefined } = renderHook(() => usePicklistPersistence(undefined));
-      
-      // Mock the saveToDatabase method to test the shareId validation
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true })
-      });
-
       let persistResult;
       await act(async () => {
-        // This should use session storage since shareId is null/undefined
-        persistResult = await resultWithUndefined.current.persistPicklist(testPicklist);
+        persistResult = await result.current.persistPicklist(testPicklist);
       });
 
-      // Should call session storage endpoint, not database
-      expect(fetch).toHaveBeenCalledWith('/api/session/picklist', expect.any(Object));
+      expect(persistResult).toEqual({ success: false, error: 'No share ID provided - session storage removed' });
+      expect(fetch).not.toHaveBeenCalled();
     });
   });
 

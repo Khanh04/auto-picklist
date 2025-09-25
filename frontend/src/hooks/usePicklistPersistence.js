@@ -6,17 +6,7 @@ import apiClient from '../utils/apiClient';
 export const usePicklistPersistence = (shareId = null) => {
   const saveInProgress = useRef(false);
 
-  // Save to session storage (for non-shared lists)
-  const saveToSession = useCallback(async (picklist) => {
-    try {
-      await apiClient.saveSessionPicklist(picklist);
-      devLog('✅ Saved picklist to session storage');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Session storage error:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
+  // Session storage removed - all lists are now shared
 
   // Save to database (for shared lists)
   const saveToDatabase = useCallback(async (picklist) => {
@@ -32,7 +22,7 @@ export const usePicklistPersistence = (shareId = null) => {
     }
   }, [shareId]);
 
-  // Main persistence function - chooses appropriate backend
+  // Main persistence function - only saves to database
   const persistPicklist = useCallback(async (picklist) => {
     if (saveInProgress.current) {
       devLog('⏳ Save already in progress, skipping...');
@@ -40,37 +30,24 @@ export const usePicklistPersistence = (shareId = null) => {
     }
 
     saveInProgress.current = true;
-    
+
     try {
       let result;
       if (shareId) {
         // Shared list - save to database
         result = await saveToDatabase(picklist);
       } else {
-        // Local list - save to session
-        result = await saveToSession(picklist);
+        // No session storage - return error for local lists
+        return { success: false, error: 'No share ID provided - session storage removed' };
       }
-      
+
       return result;
     } finally {
       saveInProgress.current = false;
     }
-  }, [shareId, saveToDatabase, saveToSession]);
+  }, [shareId, saveToDatabase]);
 
-  // Load from session storage
-  const loadFromSession = useCallback(async () => {
-    try {
-      const data = await apiClient.getSessionPicklist();
-      if (data.picklist) {
-        devLog('✅ Loaded picklist from session storage:', data.picklist.length, 'items');
-        return { success: true, picklist: data.picklist };
-      }
-      return { success: false, error: 'No session data found' };
-    } catch (error) {
-      console.error('❌ Session load error:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
+  // Session loading removed - all lists are now shared
 
   // Load from database
   const loadFromDatabase = useCallback(async () => {
@@ -89,33 +66,22 @@ export const usePicklistPersistence = (shareId = null) => {
     }
   }, [shareId]);
 
-  // Main load function - chooses appropriate backend
+  // Main load function - only loads from database
   const loadPicklist = useCallback(async () => {
     if (shareId) {
       // Shared list - load from database
       return await loadFromDatabase();
     } else {
-      // Local list - load from session
-      return await loadFromSession();
+      // No session storage - return error for local lists
+      return { success: false, error: 'No share ID provided - session storage removed' };
     }
-  }, [shareId, loadFromDatabase, loadFromSession]);
+  }, [shareId, loadFromDatabase]);
 
-  // Clear storage
-  const clearStorage = useCallback(async () => {
-    try {
-      await apiClient.clearSessionPicklist();
-      devLog('✅ Cleared session storage');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Clear storage error:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
+  // Clear storage removed - all lists are now shared
 
   return {
     persistPicklist,
     loadPicklist,
-    clearStorage,
     saveInProgress: saveInProgress.current
   };
 };

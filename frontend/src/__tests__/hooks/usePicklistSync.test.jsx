@@ -8,7 +8,6 @@ jest.mock('../../hooks/usePicklistPersistence', () => ({
   usePicklistPersistence: jest.fn(() => ({
     persistPicklist: jest.fn(),
     loadPicklist: jest.fn(),
-    clearStorage: jest.fn(),
     saveInProgress: false
   }))
 }));
@@ -33,7 +32,6 @@ describe('usePicklistSync', () => {
     usePicklistPersistence.mockReturnValue({
       persistPicklist: mockPersistPicklist,
       loadPicklist: mockLoadPicklist,
-      clearStorage: jest.fn(),
       saveInProgress: false
     });
 

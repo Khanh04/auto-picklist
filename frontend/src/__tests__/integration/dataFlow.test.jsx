@@ -278,13 +278,10 @@ describe('Data Flow Integration Tests', () => {
         jest.advanceTimersByTime(350);
       });
 
-      // Verify save was called
+      // Since session storage is removed, persistence should not make API calls without shareId
       await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith('/api/session/picklist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: expect.stringContaining('"quantity":5')
-        });
+        // Should not call session API since shareId is not provided
+        expect(fetch).not.toHaveBeenCalledWith('/api/session/picklist', expect.any(Object));
       });
 
       jest.useRealTimers();
