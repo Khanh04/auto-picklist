@@ -55,8 +55,7 @@ function AppContent() {
       // Wrap result to maintain existing component expectations
       setResults({ success: true, ...result })
 
-      // Clear database session when new file is uploaded
-      apiClient.clearSessionPicklist().catch(console.warn)
+      // Session clearing removed - now using shared lists only
       navigate('/')
     } catch (err) {
       console.error('Upload error:', err)
@@ -91,8 +90,7 @@ function AppContent() {
       devLog('Combined picklist items:', result.combinedPicklist)
       setResults(transformedResult)
       
-      // Clear database session when new file is uploaded
-      apiClient.clearSessionPicklist().catch(console.warn)
+      // Session clearing removed - now using shared lists only
       navigate('/')
     } catch (err) {
       console.error('Multi-CSV upload error:', err)
@@ -104,8 +102,7 @@ function AppContent() {
   const handleReset = () => {
     setResults(null)
     setError(null)
-    // Clear database session when resetting
-    apiClient.clearSessionPicklist().catch(console.warn)
+    // Session clearing removed - now using shared lists only
     navigate('/')
   }
 
