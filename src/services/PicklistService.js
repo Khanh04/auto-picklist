@@ -4,11 +4,24 @@ const PreferenceRepository = require('../repositories/PreferenceRepository');
 const SupplierPreferenceRepository = require('../repositories/SupplierPreferenceRepository');
 
 class PicklistService {
-    constructor() {
-        this.matchingService = new MatchingService();
-        this.userFirstMatchingService = new UserFirstMatchingService();
-        this.preferenceRepository = new PreferenceRepository();
-        this.supplierPreferenceRepository = new SupplierPreferenceRepository();
+    constructor(userId = null) {
+        this.matchingService = new MatchingService(userId);
+        this.userFirstMatchingService = new UserFirstMatchingService(userId);
+        this.preferenceRepository = new PreferenceRepository(userId);
+        this.supplierPreferenceRepository = new SupplierPreferenceRepository(userId);
+        this.userId = userId;
+    }
+
+    /**
+     * Set user context for all services and repositories
+     * @param {number} userId - User ID
+     */
+    setUserContext(userId) {
+        this.userId = userId;
+        this.matchingService.setUserContext && this.matchingService.setUserContext(userId);
+        this.userFirstMatchingService.setUserContext(userId);
+        this.preferenceRepository.setUserContext && this.preferenceRepository.setUserContext(userId);
+        this.supplierPreferenceRepository.setUserContext(userId);
     }
 
     /**

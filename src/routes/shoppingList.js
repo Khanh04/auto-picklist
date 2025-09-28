@@ -60,10 +60,10 @@ router.post('/share',
 
         // Insert into database
         const insertResult = await pool.query(`
-            INSERT INTO shopping_lists (share_id, title, picklist_data)
-            VALUES ($1, $2, $3)
+            INSERT INTO shopping_lists (share_id, title, picklist_data, user_id, created_by_user_id)
+            VALUES ($1, $2, $3, $4, $4)
             RETURNING id, created_at, expires_at
-        `, [shareId, title || 'Shopping List', JSON.stringify(cleanPicklist)]);
+        `, [shareId, title || 'Shopping List', JSON.stringify(cleanPicklist), req.user.id]);
 
         const shoppingListId = insertResult.rows[0].id;
         const createdAt = insertResult.rows[0].created_at;
@@ -248,8 +248,8 @@ router.put('/share/:shareId/picklist',
 
         // Update the picklist data in the database
         await pool.query(`
-            UPDATE shopping_lists 
-            SET picklist_data = $1
+            UPDATE shopping_lists
+            SET picklist_data = $1, updated_at = CURRENT_TIMESTAMP
             WHERE id = $2
         `, [JSON.stringify(cleanPicklist), shoppingListId]);
 

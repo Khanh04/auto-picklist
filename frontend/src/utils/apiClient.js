@@ -6,6 +6,17 @@
 class ApiClient {
   constructor(baseUrl = '') {
     this.baseUrl = baseUrl;
+    this.isRefreshing = false;
+    this.failedQueue = [];
+    this.onAuthFailure = null; // Callback for when authentication completely fails
+  }
+
+  /**
+   * Set callback for authentication failure
+   * @param {Function} callback - Function to call when auth fails
+   */
+  setAuthFailureCallback(callback) {
+    this.onAuthFailure = callback;
   }
 
   /**
@@ -29,21 +40,86 @@ class ApiClient {
   }
 
   /**
+   * Add authentication headers to request
+   */
+  addAuthHeaders(headers = {}) {
+    // JWT tokens are handled via httpOnly cookies, so no manual header needed
+    // But we can add other auth-related headers if needed
+    return {
+      ...headers
+    };
+  }
+
+  /**
+   * Handle token refresh and retry failed requests
+   */
+  async handleTokenRefresh() {
+    if (this.isRefreshing) {
+      // If refresh is already in progress, queue this request
+      return new Promise((resolve, reject) => {
+        this.failedQueue.push({ resolve, reject });
+      });
+    }
+
+    this.isRefreshing = true;
+
+    try {
+      await this.refreshToken();
+
+      // Process queued requests
+      this.failedQueue.forEach(({ resolve }) => resolve());
+      this.failedQueue = [];
+
+      this.isRefreshing = false;
+      return true;
+    } catch (error) {
+      // Process queued requests with error
+      this.failedQueue.forEach(({ reject }) => reject(error));
+      this.failedQueue = [];
+
+      this.isRefreshing = false;
+      throw error;
+    }
+  }
+
+  /**
    * Generic fetch wrapper with error handling and response normalization
    */
-  async request(endpoint, options = {}) {
+  async request(endpoint, options = {}, retryOnAuth = true) {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     try {
       const response = await fetch(url, {
+        credentials: 'include', // Include cookies for JWT
         headers: {
           'Content-Type': 'application/json',
-          ...options.headers
+          ...this.addAuthHeaders(options.headers)
         },
         ...options
       });
 
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.status === 401 && retryOnAuth && !endpoint.includes('/auth/')) {
+        try {
+          await this.handleTokenRefresh();
+          // Retry the original request
+          return this.request(endpoint, options, false);
+        } catch (refreshError) {
+          // Refresh failed, trigger auth failure callback
+          if (this.onAuthFailure) {
+            this.onAuthFailure();
+          }
+          const data = await response.json();
+          throw new Error(data.error?.message || 'Authentication failed');
+        }
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+      }
+
       return this.normalizeResponse(data);
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
@@ -243,6 +319,64 @@ class ApiClient {
    */
   async getSupplierPreferenceStats() {
     return this.get('/api/supplier-preferences/stats');
+  }
+
+  // Authentication API methods
+
+  /**
+   * User registration
+   */
+  async register(userData) {
+    return this.post('/api/auth/register', userData);
+  }
+
+  /**
+   * User login
+   */
+  async login(email, password) {
+    return this.post('/api/auth/login', { email, password });
+  }
+
+  /**
+   * Refresh JWT tokens
+   */
+  async refreshToken() {
+    return this.post('/api/auth/refresh');
+  }
+
+  /**
+   * User logout
+   */
+  async logout() {
+    return this.post('/api/auth/logout');
+  }
+
+  /**
+   * Get current user profile
+   */
+  async getCurrentUser() {
+    return this.get('/api/auth/me');
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(profileData) {
+    return this.put('/api/auth/profile', profileData);
+  }
+
+  /**
+   * Get user preferences
+   */
+  async getUserPreferences() {
+    return this.get('/api/auth/preferences');
+  }
+
+  /**
+   * Update user preferences
+   */
+  async updateUserPreferences(preferences) {
+    return this.put('/api/auth/preferences', preferences);
   }
 }
 

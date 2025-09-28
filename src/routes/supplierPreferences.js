@@ -7,9 +7,6 @@ const { enhancedAsyncHandler, createValidationError } = require('../middleware/e
 const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody } = require('../middleware/validation');
 
-const picklistService = new PicklistService();
-const supplierPreferenceRepository = new SupplierPreferenceRepository();
-
 /**
  * POST /api/supplier-preferences/intelligent-picklist
  * Generate intelligent picklist with user-first supplier selection
@@ -32,6 +29,9 @@ router.post('/intelligent-picklist',
                 throw createValidationError(['orderItems'], `Item at index ${i} must have 'item' and 'quantity' properties`);
             }
         }
+
+        // Create user-context service instance
+        const picklistService = new PicklistService(req.user.id);
 
         // Use the enhanced intelligent picklist generation
         const picklist = await picklistService.createIntelligentPicklist(orderItems);
@@ -63,6 +63,9 @@ router.post('/update-selection',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { originalItem, newSupplierId, matchedProductId } = req.body;
+
+        // Create user-context service instance
+        const picklistService = new PicklistService(req.user.id);
 
         const result = await picklistService.updateSupplierSelection(
             originalItem,
@@ -99,6 +102,9 @@ router.post('/store-batch',
             }
         }
 
+        // Create user-context service instance
+        const picklistService = new PicklistService(req.user.id);
+
         const storedPreferences = await picklistService.storeSupplierPreferences(preferences);
 
         sendSuccessResponse(req, res, {
@@ -118,6 +124,9 @@ router.get('/:originalItem',
     enhancedAsyncHandler(async (req, res) => {
         const { originalItem } = req.params;
         const { matchedProductId } = req.query;
+
+        // Create user-context repository instance
+        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
 
         const preference = await supplierPreferenceRepository.getPreference(
             originalItem,
@@ -158,6 +167,9 @@ router.post('/summary/items',
             throw createValidationError(['items'], 'Items array is required and cannot be empty');
         }
 
+        // Create user-context service instance
+        const picklistService = new PicklistService(req.user.id);
+
         // Use the UserFirstMatchingService method via PicklistService
         const summary = await picklistService.userFirstMatchingService.getPreferencesSummary(items);
 
@@ -173,6 +185,9 @@ router.post('/summary/items',
  */
 router.get('/all',
     enhancedAsyncHandler(async (req, res) => {
+        // Create user-context repository instance
+        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+
         const allPreferences = await supplierPreferenceRepository.getAllWithDetails();
 
         // Add preference strength to each preference
@@ -194,6 +209,9 @@ router.get('/all',
  */
 router.get('/stats',
     enhancedAsyncHandler(async (req, res) => {
+        // Create user-context repository instance
+        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+
         const stats = await supplierPreferenceRepository.getPreferenceStats();
 
         sendSuccessResponse(req, res, {
@@ -220,6 +238,9 @@ router.delete('/:preferenceId',
         if (!preferenceId || isNaN(parseInt(preferenceId))) {
             throw createValidationError(['preferenceId'], 'Valid preference ID is required');
         }
+
+        // Create user-context repository instance
+        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
 
         const deleted = await supplierPreferenceRepository.deleteById(parseInt(preferenceId));
 
@@ -249,6 +270,9 @@ router.post('/cleanup',
         if (daysOld < 30) {
             throw createValidationError(['daysOld'], 'Cleanup period must be at least 30 days');
         }
+
+        // Create user-context repository instance
+        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
 
         const cleanedCount = await supplierPreferenceRepository.cleanupOldPreferences(daysOld);
 

@@ -2,20 +2,22 @@ const BaseRepository = require('./BaseRepository');
 
 class SupplierRepository extends BaseRepository {
     /**
-     * Get all suppliers with product counts
+     * Get all suppliers with product counts for a specific user
+     * @param {number} userId - User ID to filter by
      * @returns {Promise<Array>} Suppliers with product counts
      */
-    async getAllWithProductCounts() {
+    async getAllWithProductCounts(userId) {
         const query = `
             SELECT s.id, s.name, s.created_at,
                    COUNT(sp.product_id) as product_count
             FROM suppliers s
-            LEFT JOIN supplier_prices sp ON s.id = sp.supplier_id
+            LEFT JOIN supplier_prices sp ON s.id = sp.supplier_id AND sp.user_id = $1
+            WHERE s.user_id = $2
             GROUP BY s.id, s.name, s.created_at
             ORDER BY s.name
         `;
-        
-        const result = await this.query(query);
+
+        const result = await this.query(query, [userId, userId]);
         return result.rows;
     }
 

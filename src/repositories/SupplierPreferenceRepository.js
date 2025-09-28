@@ -12,17 +12,22 @@ class SupplierPreferenceRepository extends BaseRepository {
      * @returns {Promise<Object|null>} Preference with supplier details
      */
     async getPreference(originalItem, matchedProductId = null) {
+        if (!this.userId) {
+            throw new Error('User context required for supplier preferences. Call setUserContext(userId) first.');
+        }
+
         const query = `
             SELECT sp.*, s.name as supplier_name, s.id as supplier_id
             FROM supplier_preferences sp
             JOIN suppliers s ON sp.preferred_supplier_id = s.id
             WHERE LOWER(sp.original_item) = LOWER($1)
+            AND sp.user_id = $${matchedProductId ? '3' : '2'}
             ${matchedProductId ? 'AND sp.matched_product_id = $2' : 'AND sp.matched_product_id IS NULL'}
             ORDER BY sp.frequency DESC, sp.last_used DESC
             LIMIT 1
         `;
 
-        const params = matchedProductId ? [originalItem, matchedProductId] : [originalItem];
+        const params = matchedProductId ? [originalItem, matchedProductId, this.userId] : [originalItem, this.userId];
         const result = await this.query(query, params);
         return result.rows[0] || null;
     }
@@ -35,10 +40,14 @@ class SupplierPreferenceRepository extends BaseRepository {
      * @returns {Promise<Object>} Created or updated preference
      */
     async upsert(originalItem, supplierId, matchedProductId = null) {
+        if (!this.userId) {
+            throw new Error('User context required for supplier preferences. Call setUserContext(userId) first.');
+        }
+
         const query = `
-            INSERT INTO supplier_preferences (original_item, matched_product_id, preferred_supplier_id, frequency, last_used, updated_at)
-            VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT (original_item, matched_product_id, preferred_supplier_id)
+            INSERT INTO supplier_preferences (user_id, original_item, matched_product_id, preferred_supplier_id, frequency, last_used, updated_at)
+            VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, original_item, matched_product_id, preferred_supplier_id)
             DO UPDATE SET
                 frequency = supplier_preferences.frequency + 1,
                 last_used = CURRENT_TIMESTAMP,
@@ -46,7 +55,7 @@ class SupplierPreferenceRepository extends BaseRepository {
             RETURNING *
         `;
 
-        const result = await this.query(query, [originalItem, matchedProductId, supplierId]);
+        const result = await this.query(query, [this.userId, originalItem, matchedProductId, supplierId]);
         return result.rows[0];
     }
 
@@ -58,14 +67,18 @@ class SupplierPreferenceRepository extends BaseRepository {
     async batchUpsert(preferences) {
         if (!preferences.length) return [];
 
+        if (!this.userId) {
+            throw new Error('User context required for supplier preferences. Call setUserContext(userId) first.');
+        }
+
         return await this.transaction(async (client) => {
             const results = [];
 
             for (const pref of preferences) {
                 const query = `
-                    INSERT INTO supplier_preferences (original_item, matched_product_id, preferred_supplier_id, frequency, last_used, updated_at)
-                    VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ON CONFLICT (original_item, matched_product_id, preferred_supplier_id)
+                    INSERT INTO supplier_preferences (user_id, original_item, matched_product_id, preferred_supplier_id, frequency, last_used, updated_at)
+                    VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id, original_item, matched_product_id, preferred_supplier_id)
                     DO UPDATE SET
                         frequency = supplier_preferences.frequency + 1,
                         last_used = CURRENT_TIMESTAMP,
@@ -74,6 +87,7 @@ class SupplierPreferenceRepository extends BaseRepository {
                 `;
 
                 const result = await client.query(query, [
+                    this.userId,
                     pref.originalItem,
                     pref.matchedProductId,
                     pref.supplierId
@@ -90,6 +104,10 @@ class SupplierPreferenceRepository extends BaseRepository {
      * @returns {Promise<Array>} All preferences with supplier and product details
      */
     async getAllWithDetails() {
+        if (!this.userId) {
+            throw new Error('User context required for supplier preferences. Call setUserContext(userId) first.');
+        }
+
         const query = `
             SELECT sp.*,
                    s.name as supplier_name,
@@ -97,10 +115,11 @@ class SupplierPreferenceRepository extends BaseRepository {
             FROM supplier_preferences sp
             JOIN suppliers s ON sp.preferred_supplier_id = s.id
             LEFT JOIN products p ON sp.matched_product_id = p.id
+            WHERE sp.user_id = $1
             ORDER BY sp.last_used DESC, sp.frequency DESC
         `;
 
-        const result = await this.query(query);
+        const result = await this.query(query, [this.userId]);
         return result.rows;
     }
 

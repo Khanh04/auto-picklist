@@ -8,11 +8,23 @@ const SupplierRepository = require('../repositories/SupplierRepository');
  * Moves all supplier selection logic to the backend
  */
 class UserFirstMatchingService extends MatchingService {
-    constructor() {
+    constructor(userId = null) {
         super();
-        this.supplierPreferenceRepository = new SupplierPreferenceRepository();
-        this.productRepository = new ProductRepository();
-        this.supplierRepository = new SupplierRepository();
+        this.supplierPreferenceRepository = new SupplierPreferenceRepository(userId);
+        this.productRepository = new ProductRepository(userId);
+        this.supplierRepository = new SupplierRepository(userId);
+        this.userId = userId;
+    }
+
+    /**
+     * Set user context for all repositories
+     * @param {number} userId - User ID
+     */
+    setUserContext(userId) {
+        this.userId = userId;
+        this.supplierPreferenceRepository.setUserContext(userId);
+        this.productRepository.setUserContext(userId);
+        this.supplierRepository.setUserContext(userId);
     }
 
     /**

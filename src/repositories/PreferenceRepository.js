@@ -2,19 +2,21 @@ const BaseRepository = require('./BaseRepository');
 
 class PreferenceRepository extends BaseRepository {
     /**
-     * Get all preferences with product details
+     * Get all preferences with product details for a specific user
+     * @param {number} userId - User ID to filter by
      * @returns {Promise<Array>} Preferences with product information
      */
-    async getAll() {
+    async getAll(userId) {
         const query = `
-            SELECT mp.id, mp.original_item, mp.frequency, mp.last_used, mp.created_at,
-                   p.description as matched_description
-            FROM matching_preferences mp
-            JOIN products p ON mp.matched_product_id = p.id
-            ORDER BY mp.last_used DESC, mp.frequency DESC
+            SELECT sp.id, sp.original_item, sp.frequency, sp.last_used, sp.created_at,
+                   s.name as supplier_name, sp.preferred_supplier_id
+            FROM supplier_preferences sp
+            JOIN suppliers s ON sp.preferred_supplier_id = s.id
+            WHERE sp.user_id = $1
+            ORDER BY sp.last_used DESC, sp.frequency DESC
         `;
-        
-        const result = await this.query(query);
+
+        const result = await this.query(query, [userId]);
         return result.rows;
     }
 

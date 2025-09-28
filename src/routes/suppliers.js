@@ -13,8 +13,8 @@ const supplierRepository = new SupplierRepository();
  * Get all suppliers with product counts
  */
 router.get('/', enhancedAsyncHandler(async (req, res) => {
-    const suppliers = await supplierRepository.getAllWithProductCounts();
-    
+    const suppliers = await supplierRepository.getAllWithProductCounts(req.user.id);
+
     sendSuccessResponse(req, res, { suppliers }, {
         count: suppliers.length,
         message: 'Suppliers retrieved successfully'

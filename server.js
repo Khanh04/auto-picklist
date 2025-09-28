@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const http = require('http');
+const cookieParser = require('cookie-parser');
 
 // Import configuration and middleware
 const config = require('./src/config');
@@ -21,6 +22,8 @@ const picklistRoutes = require('./src/routes/picklist');
 const shoppingListRoutes = require('./src/routes/shoppingList');
 const databaseRoutes = require('./src/routes/database');
 const multiCsvRoutes = require('./src/routes/multiCsv');
+const createAuthRoutes = require('./src/routes/auth');
+const createAuthMiddleware = require('./src/middleware/auth');
 
 const app = express();
 const port = config.server.port;
@@ -68,16 +71,17 @@ if (config.features.enableHealthCheck) {
 }
 
 // Global middleware with security enhancements
-app.use(express.json({ 
+app.use(express.json({
     limit: '10mb',
     strict: true, // Only parse arrays and objects
     type: 'application/json'
 }));
-app.use(express.urlencoded({ 
-    extended: true, 
+app.use(express.urlencoded({
+    extended: true,
     limit: '10mb',
     parameterLimit: 1000 // Limit URL-encoded parameters
 }));
+app.use(cookieParser()); // Parse cookies for JWT authentication
 
 // Request context tracking (must be early in middleware chain)
 app.use(requestContext);
@@ -96,7 +100,8 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', config.security.corsOrigin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    
+    res.header('Access-Control-Allow-Credentials', 'true'); // Support for authentication cookies
+
     if (req.method === 'OPTIONS') {
         res.sendStatus(200);
     } else {
@@ -121,28 +126,46 @@ app.use((req, res, next) => {
 // Enhanced request logging middleware
 app.use(requestLogger);
 
-// API Routes
-app.use('/api/items', itemsRoutes);
-app.use('/api/suppliers', suppliersRoutes);
-app.use('/api/preferences', preferencesRoutes);
-app.use('/api/supplier-preferences', supplierPreferencesRoutes);
-app.use('/api/picklist', picklistRoutes);
-app.use('/api/shopping-list', shoppingListRoutes);
-app.use('/api/database', databaseRoutes);
-app.use('/api/multi-csv', multiCsvRoutes);
+// Initialize database connection and authentication middleware
+const { pool } = require('./src/database/config');
+const knex = require('knex');
 
-// Legacy API endpoints for backward compatibility
-app.get('/api/get-preference/:originalItem', (req, res, next) => {
+// Create Knex instance using the migration configuration
+const environment = process.env.NODE_ENV || 'development';
+const knexConfig = require('./src/migrations/knexfile.js')[environment];
+const db = knex(knexConfig);
+
+const authMiddleware = createAuthMiddleware(db, {
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    jwtExpiresIn: '15m',
+    refreshTokenExpiresIn: '7d'
+});
+
+// API Routes
+app.use('/api/auth', createAuthRoutes(db, authMiddleware));
+
+// Core API routes - ALL require authentication (Phase 2: Mandatory Authentication)
+app.use('/api/items', authMiddleware.authenticateRequired, itemsRoutes);
+app.use('/api/suppliers', authMiddleware.authenticateRequired, suppliersRoutes);
+app.use('/api/preferences', authMiddleware.authenticateRequired, preferencesRoutes);
+app.use('/api/supplier-preferences', authMiddleware.authenticateRequired, supplierPreferencesRoutes);
+app.use('/api/picklist', authMiddleware.authenticateRequired, picklistRoutes);
+app.use('/api/shopping-list', authMiddleware.authenticateRequired, shoppingListRoutes);
+app.use('/api/database', authMiddleware.authenticateRequired, databaseRoutes);
+app.use('/api/multi-csv', authMiddleware.authenticateRequired, multiCsvRoutes);
+
+// Legacy API endpoints for backward compatibility - require authentication
+app.get('/api/get-preference/:originalItem', authMiddleware.authenticateRequired, (req, res, next) => {
     req.url = `/api/preferences/${req.params.originalItem}`;
     preferencesRoutes(req, res, next);
 });
 
-app.post('/api/store-preferences', (req, res, next) => {
+app.post('/api/store-preferences', authMiddleware.authenticateRequired, (req, res, next) => {
     req.url = '/api/preferences';
     preferencesRoutes(req, res, next);
 });
 
-app.post('/api/match-item', (req, res, next) => {
+app.post('/api/match-item', authMiddleware.authenticateRequired, (req, res, next) => {
     req.url = '/api/items/match';
     itemsRoutes(req, res, next);
 });

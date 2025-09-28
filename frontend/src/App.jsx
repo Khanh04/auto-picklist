@@ -4,7 +4,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
 import { devLog } from './utils/logger'
 import { PicklistProvider, usePicklist } from './contexts/PicklistContext'
+import { AuthProvider } from './contexts/AuthContext'
 import apiClient from './utils/apiClient'
+import AuthGate from './components/AuthGate'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import PicklistPreview from './components/PicklistPreview'
@@ -261,11 +263,15 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <PicklistProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </PicklistProvider>
+      <AuthProvider>
+        <AuthGate>
+          <PicklistProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </PicklistProvider>
+        </AuthGate>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

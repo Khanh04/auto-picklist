@@ -15,8 +15,9 @@ const picklistService = new PicklistService();
  * Get all user preferences
  */
 router.get('/', enhancedAsyncHandler(async (req, res) => {
-    const preferences = await preferenceRepository.getAll();
-    
+    console.log('Fetching preferences for user:', req.user.id);
+    const preferences = await preferenceRepository.getAll(req.user.id);
+
     sendSuccessResponse(req, res, { preferences }, {
         count: preferences.length,
         message: 'Preferences retrieved successfully'
