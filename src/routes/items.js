@@ -10,17 +10,16 @@ const { enhancedAsyncHandler, createValidationError, createNotFoundError } = req
 const { sendSuccessResponse, sendErrorResponse } = require('../utils/errorResponse');
 const { ERROR_TYPES } = require('../utils/errorTypes');
 
-const productRepository = new ProductRepository();
-const supplierRepository = new SupplierRepository();
-const matchingService = new MatchingService();
+// Note: Repositories and services will be instantiated with user context in route handlers
 
 /**
  * GET /api/items
- * Get all items with best prices
+ * Get all items with best prices for the authenticated user
  */
 router.get('/', enhancedAsyncHandler(async (req, res) => {
+    const productRepository = new ProductRepository(req.user?.id);
     const items = await productRepository.getAllWithBestPrices();
-    
+
     sendSuccessResponse(req, res, { items }, {
         count: items.length,
         message: 'Items retrieved successfully'
@@ -39,6 +38,9 @@ router.post('/',
     }),
     asyncHandler(async (req, res) => {
         const { description, supplier, price } = req.body;
+
+        const productRepository = new ProductRepository(req.user?.id);
+        const supplierRepository = new SupplierRepository(req.user?.id);
 
         // Find or create supplier
         let supplierRecord = await supplierRepository.findByName(supplier);
@@ -77,6 +79,7 @@ router.get('/:productId/suppliers',
     asyncHandler(async (req, res) => {
         const { productId } = req.params;
 
+        const productRepository = new ProductRepository(req.user?.id);
         const suppliers = await productRepository.getSuppliersByProductId(productId);
 
         if (!suppliers || suppliers.length === 0) {
@@ -113,11 +116,12 @@ router.post('/match',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { description } = req.body;
-        
+
         if (!description?.trim()) {
             throw createValidationError(['description'], 'Description cannot be empty');
         }
-        
+
+        const matchingService = new MatchingService(req.user?.id);
         const result = await matchingService.findBestSupplier(description.trim());
         
         if (result.supplier && result.price) {
@@ -145,7 +149,7 @@ router.post('/match',
 router.get('/search',
     asyncHandler(async (req, res) => {
         const { q: query, limit = 10 } = req.query;
-        
+
         if (!query || query.length < 2) {
             return res.status(400).json({
                 success: false,
@@ -153,6 +157,7 @@ router.get('/search',
             });
         }
 
+        const productRepository = new ProductRepository(req.user?.id);
         const products = await productRepository.search(query, parseInt(limit));
         
         res.json({
@@ -177,6 +182,7 @@ router.post('/:productId/switch-supplier',
         const { productId } = req.params;
         const { currentSupplier, currentPrice } = req.body;
         
+        const productRepository = new ProductRepository(req.user?.id);
         // Get all suppliers for this product, sorted by price
         const suppliers = await productRepository.getSuppliersByProductId(productId);
         
@@ -270,6 +276,7 @@ router.post('/:productId/select-supplier',
         const { productId } = req.params;
         const { selectedSupplier, selectedPrice } = req.body;
         
+        const productRepository = new ProductRepository(req.user?.id);
         // Get all suppliers for this product to validate the selection
         const suppliers = await productRepository.getSuppliersByProductId(productId);
         

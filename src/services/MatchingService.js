@@ -2,9 +2,20 @@ const ProductRepository = require('../repositories/ProductRepository');
 const PreferenceRepository = require('../repositories/PreferenceRepository');
 
 class MatchingService {
-    constructor() {
-        this.productRepository = new ProductRepository();
-        this.preferenceRepository = new PreferenceRepository();
+    constructor(userId = null) {
+        this.productRepository = new ProductRepository(userId);
+        this.preferenceRepository = new PreferenceRepository(userId);
+        this.userId = userId;
+    }
+
+    /**
+     * Set user context for this service and all repositories
+     * @param {number} userId - User ID to filter by
+     */
+    setUserContext(userId) {
+        this.userId = userId;
+        this.productRepository.setUserContext(userId);
+        this.preferenceRepository.setUserContext(userId);
     }
 
     /**
@@ -31,13 +42,17 @@ class MatchingService {
             return { supplier: null, price: null, productId: null, description: null };
         }
 
+        if (!this.userId) {
+            throw new Error('User context required for product matching. Call setUserContext(userId) first.');
+        }
+
         const { pool } = require('../database/config');
         const client = await pool.connect();
-        
+
         try {
             const normalizedItem = this.normalizeItemName(itemName);
             const searchWords = normalizedItem.split(' ').filter(word => word.length > 2);
-            
+
             if (searchWords.length === 0) {
                 return { supplier: null, price: null, productId: null, description: null };
             }
@@ -75,25 +90,30 @@ class MatchingService {
      */
     async _exactSubstringMatch(client, normalizedItem) {
         const query = `
-            SELECT 
-                psp.supplier_name,
-                psp.price,
-                psp.description,
-                psp.product_id,
+            SELECT
+                s.name as supplier_name,
+                sp.price,
+                p.description,
+                p.id as product_id,
                 10 as match_score
-            FROM product_supplier_prices psp
-            WHERE LOWER(psp.description) LIKE $1
-            ORDER BY psp.price ASC
+            FROM products p
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE LOWER(p.description) LIKE $1
+                AND p.user_id = $2
+                AND s.user_id = $2
+                AND sp.user_id = $2
+            ORDER BY sp.price ASC
             LIMIT 1
         `;
-        
-        const result = await client.query(query, [`%${normalizedItem.substring(0, 15)}%`]);
-        
+
+        const result = await client.query(query, [`%${normalizedItem.substring(0, 15)}%`, this.userId]);
+
         if (result.rows.length > 0) {
             const match = result.rows[0];
             console.log(`Match found for "${normalizedItem}": ${match.supplier_name} at $${match.price}`);
-            return { 
-                supplier: match.supplier_name, 
+            return {
+                supplier: match.supplier_name,
                 price: parseFloat(match.price),
                 productId: match.product_id,
                 description: match.description
@@ -113,34 +133,39 @@ class MatchingService {
         // Get main product type from the order item to avoid cross-category matches
         const isPolishRelated = /polish|gel|lacquer|color|duo/i.test(itemName);
         const isToolRelated = /brush|tool|dotting|file|buffer/i.test(itemName);
-        
+
         let categoryFilter = '';
         if (isPolishRelated && !isToolRelated) {
-            categoryFilter = `AND (LOWER(psp.description) LIKE '%polish%' OR LOWER(psp.description) LIKE '%gel%' OR LOWER(psp.description) LIKE '%lacquer%')`;
+            categoryFilter = `AND (LOWER(p.description) LIKE '%polish%' OR LOWER(p.description) LIKE '%gel%' OR LOWER(p.description) LIKE '%lacquer%')`;
         } else if (isToolRelated && !isPolishRelated) {
-            categoryFilter = `AND (LOWER(psp.description) LIKE '%brush%' OR LOWER(psp.description) LIKE '%tool%' OR LOWER(psp.description) LIKE '%file%')`;
+            categoryFilter = `AND (LOWER(p.description) LIKE '%brush%' OR LOWER(p.description) LIKE '%tool%' OR LOWER(p.description) LIKE '%file%')`;
         }
-        
+
         const query = `
-            SELECT 
-                psp.supplier_name,
-                psp.price,
-                psp.description,
-                psp.product_id,
+            SELECT
+                s.name as supplier_name,
+                sp.price,
+                p.description,
+                p.id as product_id,
                 5 as match_score
-            FROM product_supplier_prices psp
-            WHERE LOWER(psp.description) LIKE $1 ${categoryFilter}
-            ORDER BY psp.price ASC
+            FROM products p
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE LOWER(p.description) LIKE $1 ${categoryFilter}
+                AND p.user_id = $2
+                AND s.user_id = $2
+                AND sp.user_id = $2
+            ORDER BY sp.price ASC
             LIMIT 1
         `;
-        
-        const result = await client.query(query, [`%${orderBrand}%`]);
-        
+
+        const result = await client.query(query, [`%${orderBrand}%`, this.userId]);
+
         if (result.rows.length > 0) {
             const match = result.rows[0];
             console.log(`Brand match found for "${itemName}": ${match.supplier_name} at $${match.price}`);
-            return { 
-                supplier: match.supplier_name, 
+            return {
+                supplier: match.supplier_name,
                 price: parseFloat(match.price),
                 productId: match.product_id,
                 description: match.description
@@ -158,26 +183,31 @@ class MatchingService {
 
         const tsQuery = searchWords.join(' & ');
         const query = `
-            SELECT 
-                psp.supplier_name,
-                psp.price,
-                psp.description,
-                psp.product_id,
-                ts_rank(to_tsvector('english', psp.description), to_tsquery('english', $1)) as match_score
-            FROM product_supplier_prices psp
-            WHERE to_tsvector('english', psp.description) @@ to_tsquery('english', $1)
-            ORDER BY match_score DESC, psp.price ASC
+            SELECT
+                s.name as supplier_name,
+                sp.price,
+                p.description,
+                p.id as product_id,
+                ts_rank(to_tsvector('english', p.description), to_tsquery('english', $1)) as match_score
+            FROM products p
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE to_tsvector('english', p.description) @@ to_tsquery('english', $1)
+                AND p.user_id = $2
+                AND s.user_id = $2
+                AND sp.user_id = $2
+            ORDER BY match_score DESC, sp.price ASC
             LIMIT 1
         `;
-        
+
         try {
-            const result = await client.query(query, [tsQuery]);
-            
+            const result = await client.query(query, [tsQuery, this.userId]);
+
             if (result.rows.length > 0) {
                 const match = result.rows[0];
                 console.log(`Full-text match found: ${match.supplier_name} at $${match.price}`);
-                return { 
-                    supplier: match.supplier_name, 
+                return {
+                    supplier: match.supplier_name,
                     price: parseFloat(match.price),
                     productId: match.product_id,
                     description: match.description
@@ -195,35 +225,40 @@ class MatchingService {
      * @private
      */
     async _importantWordMatch(client, searchWords) {
-        const importantWords = searchWords.filter(word => 
+        const importantWords = searchWords.filter(word =>
             word.length > 4 && !['nail', 'polish', 'color', 'glue', 'tool', 'brush', 'size'].includes(word)
         );
-        
+
         if (importantWords.length === 0) return null;
 
-        const wordConditions = importantWords.map((_, index) => `LOWER(psp.description) LIKE $${index + 1}`).join(' OR ');
-        const wordParams = importantWords.map(word => `%${word}%`);
-        
+        const wordConditions = importantWords.map((_, index) => `LOWER(p.description) LIKE $${index + 1}`).join(' OR ');
+        const wordParams = [...importantWords.map(word => `%${word}%`), this.userId, this.userId, this.userId];
+
         const query = `
-            SELECT 
-                psp.supplier_name,
-                psp.price,
-                psp.description,
-                psp.product_id,
+            SELECT
+                s.name as supplier_name,
+                sp.price,
+                p.description,
+                p.id as product_id,
                 1 as match_score
-            FROM product_supplier_prices psp
-            WHERE ${wordConditions}
-            ORDER BY psp.price ASC
+            FROM products p
+            JOIN supplier_prices sp ON p.id = sp.product_id
+            JOIN suppliers s ON sp.supplier_id = s.id
+            WHERE (${wordConditions})
+                AND p.user_id = $${wordParams.length - 2}
+                AND s.user_id = $${wordParams.length - 1}
+                AND sp.user_id = $${wordParams.length}
+            ORDER BY sp.price ASC
             LIMIT 1
         `;
-        
+
         const result = await client.query(query, wordParams);
-        
+
         if (result.rows.length > 0) {
             const match = result.rows[0];
             console.log(`Word match found: ${match.supplier_name} at $${match.price}`);
-            return { 
-                supplier: match.supplier_name, 
+            return {
+                supplier: match.supplier_name,
                 price: parseFloat(match.price),
                 productId: match.product_id,
                 description: match.description
