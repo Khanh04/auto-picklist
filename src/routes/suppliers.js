@@ -32,6 +32,9 @@ router.post('/',
     enhancedAsyncHandler(async (req, res) => {
         const { name } = req.body;
 
+        // Set user context for repository
+        supplierRepository.setUserContext(req.user.id);
+
         // Check if supplier already exists
         const existingSupplier = await supplierRepository.findByName(name);
         if (existingSupplier) {
@@ -54,7 +57,10 @@ router.get('/:supplierId',
     validateParams({ supplierId: { type: 'id' } }),
     enhancedAsyncHandler(async (req, res) => {
         const { supplierId } = req.params;
-        
+
+        // Set user context for repository
+        supplierRepository.setUserContext(req.user.id);
+
         const supplier = await supplierRepository.getById(supplierId);
         if (!supplier) {
             throw createNotFoundError('Supplier', supplierId);
@@ -72,7 +78,10 @@ router.get('/:supplierId/items',
     validateParams({ supplierId: { type: 'id' } }),
     enhancedAsyncHandler(async (req, res) => {
         const { supplierId } = req.params;
-        
+
+        // Set user context for repository
+        supplierRepository.setUserContext(req.user.id);
+
         // Verify supplier exists
         const supplier = await supplierRepository.getById(supplierId);
         if (!supplier) {
@@ -104,6 +113,9 @@ router.put('/:supplierId/items/:supplierPriceId',
         const { supplierPriceId } = req.params;
         const { price } = req.body;
 
+        // Set user context for repository
+        supplierRepository.setUserContext(req.user.id);
+
         const updatedPrice = await supplierRepository.updatePrice(supplierPriceId, price);
         
         if (!updatedPrice) {
@@ -127,6 +139,9 @@ router.delete('/:supplierId/items/:supplierPriceId',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { supplierPriceId } = req.params;
+
+        // Set user context for repository
+        supplierRepository.setUserContext(req.user.id);
 
         const deleted = await supplierRepository.removeProduct(supplierPriceId);
         

@@ -14,6 +14,7 @@ import ShoppingList from './components/ShoppingList'
 import DatabaseManager from './components/DatabaseManager'
 import ErrorDisplay from './components/ErrorDisplay'
 import Footer from './components/Footer'
+import PickListsDashboard from './components/PickListsDashboard'
 
 const theme = createTheme({
   palette: {
@@ -153,13 +154,13 @@ function AppContent() {
     </div>
   )
 
-  // Home Page Component
+  // Home Page Component - now shows dashboard instead of upload
   const HomePage = () => (
     <div className="min-h-screen gradient-bg">
       <Header />
       <main className="flex-1">
         {!results ? (
-          <FileUpload onFileUpload={handleFileUpload} onMultiFileUpload={handleMultiFileUpload} />
+          <PickListsDashboard />
         ) : (
           <PicklistPreview
             results={results}
@@ -167,6 +168,17 @@ function AppContent() {
             onNavigate={(view) => navigate(`/${view}`)}
           />
         )}
+      </main>
+      <Footer />
+    </div>
+  )
+
+  // Upload Page Component - dedicated page for file upload
+  const UploadPage = () => (
+    <div className="min-h-screen gradient-bg">
+      <Header />
+      <main className="flex-1">
+        <FileUpload onFileUpload={handleFileUpload} onMultiFileUpload={handleMultiFileUpload} />
       </main>
       <Footer />
     </div>
@@ -266,6 +278,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/upload" element={<UploadPage />} />
       <Route path="/processing" element={<ProcessingPage />} />
       <Route path="/preview" element={<PreviewPage />} />
       <Route path="/shopping" element={<ShoppingListPage />} />

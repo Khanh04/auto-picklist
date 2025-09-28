@@ -262,12 +262,55 @@ router.put('/share/:shareId/picklist',
 );
 
 /**
+ * GET /api/shopping-list/user
+ * Get current user's pick lists (shopping lists)
+ */
+router.get('/user', enhancedAsyncHandler(async (req, res) => {
+    const userId = req.user.id;
+
+    const listsResult = await pool.query(`
+        SELECT
+            sl.share_id,
+            sl.title,
+            sl.created_at,
+            sl.expires_at,
+            sl.visibility,
+            sl.description,
+            COALESCE(jsonb_array_length(sl.picklist_data), 0) as item_count,
+            CASE
+                WHEN sl.expires_at > CURRENT_TIMESTAMP THEN true
+                ELSE false
+            END as is_active
+        FROM shopping_lists sl
+        WHERE (sl.user_id = $1 OR sl.created_by_user_id = $1)
+        ORDER BY sl.created_at DESC
+        LIMIT 50
+    `, [userId]);
+
+    const pickLists = listsResult.rows.map(row => ({
+        shareId: row.share_id,
+        title: row.title || 'Untitled Pick List',
+        createdAt: row.created_at.toISOString(),
+        expiresAt: row.expires_at.toISOString(),
+        itemCount: parseInt(row.item_count),
+        isActive: row.is_active,
+        visibility: row.visibility,
+        description: row.description
+    }));
+
+    sendSuccessResponse(req, res, {
+        pickLists,
+        total: pickLists.length
+    });
+}));
+
+/**
  * GET /api/shopping-list/stats
  * Get sharing statistics (optional, for admin purposes)
  */
 router.get('/stats', enhancedAsyncHandler(async (req, res) => {
     const statsResult = await pool.query(`
-        SELECT 
+        SELECT
             COUNT(*) as total_lists,
             COUNT(CASE WHEN expires_at > CURRENT_TIMESTAMP THEN 1 END) as active_lists,
             COUNT(CASE WHEN expires_at <= CURRENT_TIMESTAMP THEN 1 END) as expired_lists
@@ -275,7 +318,7 @@ router.get('/stats', enhancedAsyncHandler(async (req, res) => {
     `);
 
     const itemStatsResult = await pool.query(`
-        SELECT 
+        SELECT
             COUNT(*) as total_items,
             COUNT(CASE WHEN purchased_quantity >= requested_quantity THEN 1 END) as checked_items
         FROM shopping_list_items sli

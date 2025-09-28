@@ -266,6 +266,13 @@ class ApiClient {
     return this.put(`/api/shopping-list/share/${shareId}/picklist`, { picklist });
   }
 
+  /**
+   * Get current user's pick lists
+   */
+  async getUserPickLists() {
+    return this.get('/api/shopping-list/user');
+  }
+
 
   /**
    * Enhanced intelligent picklist generation with user-first supplier selection
