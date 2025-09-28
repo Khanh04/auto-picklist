@@ -395,56 +395,84 @@ const DatabaseManager = ({ onBack }) => {
     };
 
     return (
-        <div className="min-h-screen gradient-bg">
-            <div className="container mx-auto px-4 py-8">
-                <div className="max-w-6xl mx-auto">
+        <div className="min-h-screen gradient-bg relative">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                <div className="absolute top-20 left-1/4 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
+                <div className="absolute top-40 right-1/3 w-60 h-60 bg-white/3 rounded-full blur-3xl"></div>
+            </div>
+
+            <div className="container mx-auto px-4 py-8 relative z-10">
+                <div className="max-w-7xl mx-auto">
                     {/* Header */}
-                    <div className="text-center mb-8">
-                        <button 
-                            className="mb-6 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                    <div className="text-center mb-12 animate-fade-in">
+                        <button
+                            className="mb-8 inline-flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-sm text-white rounded-2xl border border-white/20 hover:bg-white/30 transition-all duration-300 font-medium transform hover:scale-102"
                             onClick={onBack}
                         >
-                            ← Back to Upload
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            Back to Upload
                         </button>
-                        <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg">
-                            Database Management
-                        </h2>
-                        <p className="text-lg text-white opacity-90">
-                            Manage suppliers, items, and item matching preferences
+
+                        <div className="mb-6">
+                            <div className="w-16 h-16 mx-auto mb-4 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/20">
+                                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                                </svg>
+                            </div>
+                            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight leading-tight">
+                                Database Management
+                            </h2>
+                            <div className="w-24 h-1 bg-white/30 rounded-full mx-auto mb-6"></div>
+                        </div>
+
+                        <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto leading-relaxed font-medium">
+                            Manage suppliers, items, and item matching preferences for optimal picklist generation
                         </p>
-                        
+
                         {/* Tabs */}
-                        <div className="flex justify-center mt-6">
-                            <div className="bg-blue bg-opacity-20 rounded-lg p-1 inline-flex">
+                        <div className="flex justify-center mt-10">
+                            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-1.5 border border-white/20 inline-flex gap-2">
                                 <button
                                     onClick={() => setActiveTab('manage')}
-                                    className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                    className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${
                                         activeTab === 'manage'
-                                            ? 'bg-white text-blue-600 shadow-md'
-                                            : 'text-white hover:bg-blue hover:bg-opacity-10'
+                                            ? 'bg-white text-primary-600 shadow-soft transform scale-105'
+                                            : 'text-white/90 hover:text-white hover:bg-white/10 transform hover:scale-102'
                                     }`}
                                 >
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                                    </svg>
                                     Manage Data
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('import')}
-                                    className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                    className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${
                                         activeTab === 'import'
-                                            ? 'bg-white text-blue-600 shadow-md'
-                                            : 'text-white hover:bg-blue hover:bg-opacity-10'
+                                            ? 'bg-white text-primary-600 shadow-soft transform scale-105'
+                                            : 'text-white/90 hover:text-white hover:bg-white/10 transform hover:scale-102'
                                     }`}
                                 >
-                                    📊 Import Excel
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                    Import Excel
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('preferences')}
-                                    className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                    className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${
                                         activeTab === 'preferences'
-                                            ? 'bg-white text-blue-600 shadow-md'
-                                            : 'text-white hover:bg-blue hover:bg-opacity-10'
+                                            ? 'bg-white text-primary-600 shadow-soft transform scale-105'
+                                            : 'text-white/90 hover:text-white hover:bg-white/10 transform hover:scale-102'
                                     }`}
                                 >
-                                    Item Preferences ({preferences.length})
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                                    </svg>
+                                    Preferences ({preferences.length})
                                 </button>
                             </div>
                         </div>
@@ -452,16 +480,24 @@ const DatabaseManager = ({ onBack }) => {
 
                     {/* Alert Messages */}
                     {error && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
-                            <span className="text-red-500">⚠️</span>
-                            {error}
+                        <div className="status-error px-6 py-4 rounded-2xl mb-8 flex items-center gap-3 animate-slide-up shadow-soft">
+                            <div className="w-8 h-8 bg-error-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div className="font-medium">{error}</div>
                         </div>
                     )}
 
                     {success && (
-                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
-                            <span className="text-green-500">✅</span>
-                            {success}
+                        <div className="status-success px-6 py-4 rounded-2xl mb-8 flex items-center gap-3 animate-slide-up shadow-soft">
+                            <div className="w-8 h-8 bg-success-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div className="font-medium">{success}</div>
                         </div>
                     )}
 
@@ -469,79 +505,104 @@ const DatabaseManager = ({ onBack }) => {
                     {activeTab === 'manage' && (
                         <>
                             {/* Forms Grid */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                        {/* Add Supplier Form */}
-                        <div className="bg-white rounded-xl shadow-lg p-6">
-                            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                                🏪 Add New Supplier
-                            </h3>
-                            <form onSubmit={handleAddSupplier} className="space-y-4">
-                                <div>
-                                    <label htmlFor="supplierName" className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Supplier Name:
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="supplierName"
-                                        value={newSupplier.name}
-                                        onChange={(e) => setNewSupplier({ name: e.target.value })}
-                                        placeholder="Enter supplier name (e.g., ACME Corp)"
-                                        disabled={loading}
-                                        required
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                    />
-                                </div>
-                                <button 
-                                    type="submit" 
-                                    disabled={loading || !newSupplier.name.trim()}
-                                    className="w-full gradient-bg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
-                                >
-                                    {loading ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <span className="spinner"></span>
-                                            Adding...
-                                        </span>
-                                    ) : (
-                                        '➕ Add Supplier'
-                                    )}
-                                </button>
-                            </form>
-                        </div>
-
-                        {/* Add Item Form */}
-                        <div className="bg-white rounded-xl shadow-lg p-6">
-                            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                                📦 Add New Item
-                            </h3>
-                            <form onSubmit={handleAddItem} className="space-y-4">
-                                <div>
-                                    <label htmlFor="itemDescription" className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Item Description:
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="itemDescription"
-                                        value={newItem.description}
-                                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                                        placeholder="Enter item description (e.g., OPI Nail Polish 0.5 fl oz - Red)"
-                                        disabled={loading}
-                                        required
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                    />
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 animate-slide-up">
+                                {/* Add Supplier Form */}
+                                <div className="card p-8 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-50 to-secondary-50 rounded-full -translate-y-16 translate-x-16 opacity-60"></div>
+                                    <div className="relative">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center shadow-soft">
+                                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
+                                                    <path fillRule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-2xl font-bold text-gray-800">Add New Supplier</h3>
+                                        </div>
+                                        <form onSubmit={handleAddSupplier} className="space-y-6">
+                                            <div>
+                                                <label htmlFor="supplierName" className="block text-sm font-semibold text-gray-700 mb-3">
+                                                    Supplier Name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    id="supplierName"
+                                                    value={newSupplier.name}
+                                                    onChange={(e) => setNewSupplier({ name: e.target.value })}
+                                                    placeholder="Enter supplier name (e.g., ACME Corp)"
+                                                    disabled={loading}
+                                                    required
+                                                    className="input-enhanced w-full"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={loading || !newSupplier.name.trim()}
+                                                className={`w-full py-4 px-6 rounded-2xl font-bold text-lg transition-all duration-300 transform focus:outline-none focus:ring-4 focus:ring-primary-200 ${
+                                                    loading || !newSupplier.name.trim()
+                                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                                        : 'gradient-bg text-white hover:scale-105 hover:shadow-large active:scale-[1.02] shadow-soft'
+                                                }`}
+                                            >
+                                                {loading ? (
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        <span className="spinner w-5 h-5"></span>
+                                                        Adding Supplier...
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Supplier
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <label htmlFor="itemSupplier" className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Supplier:
-                                    </label>
-                                    <select
-                                        id="itemSupplier"
-                                        value={newItem.supplier}
-                                        onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
-                                        disabled={loading}
-                                        required
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                    >
+                                {/* Add Item Form */}
+                                <div className="card p-8 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-secondary-50 to-primary-50 rounded-full -translate-y-16 -translate-x-16 opacity-60"></div>
+                                    <div className="relative">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-secondary-500 to-primary-500 rounded-2xl flex items-center justify-center shadow-soft">
+                                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM9 8H4v2h5V8z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-2xl font-bold text-gray-800">Add New Item</h3>
+                                        </div>
+                                        <form onSubmit={handleAddItem} className="space-y-6">
+                                            <div>
+                                                <label htmlFor="itemDescription" className="block text-sm font-semibold text-gray-700 mb-3">
+                                                    Item Description
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    id="itemDescription"
+                                                    value={newItem.description}
+                                                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                                                    placeholder="Enter item description (e.g., OPI Nail Polish 0.5 fl oz - Red)"
+                                                    disabled={loading}
+                                                    required
+                                                    className="input-enhanced w-full"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label htmlFor="itemSupplier" className="block text-sm font-semibold text-gray-700 mb-3">
+                                                    Supplier
+                                                </label>
+                                                <select
+                                                    id="itemSupplier"
+                                                    value={newItem.supplier}
+                                                    onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })}
+                                                    disabled={loading}
+                                                    required
+                                                    className="input-enhanced w-full"
+                                                >
                                         <option value="">Select a supplier</option>
                                         {suppliers.map((supplier) => (
                                             <option key={supplier.id} value={supplier.name}>
@@ -549,76 +610,125 @@ const DatabaseManager = ({ onBack }) => {
                                             </option>
                                         ))}
                                     </select>
-                                </div>
+                                            </div>
 
-                                <div>
-                                    <label htmlFor="itemPrice" className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Price (USD):
-                                    </label>
-                                    <input
-                                        type="number"
-                                        id="itemPrice"
-                                        value={newItem.price}
-                                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                                        placeholder="0.00"
-                                        min="0"
-                                        step="0.01"
-                                        disabled={loading}
-                                        required
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                    />
-                                </div>
+                                            <div>
+                                                <label htmlFor="itemPrice" className="block text-sm font-semibold text-gray-700 mb-3">
+                                                    Price (USD)
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-lg">$</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        id="itemPrice"
+                                                        value={newItem.price}
+                                                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                        disabled={loading}
+                                                        required
+                                                        className="input-enhanced w-full pl-8"
+                                                    />
+                                                </div>
+                                            </div>
 
-                                <button 
-                                    type="submit" 
-                                    disabled={loading || !newItem.description.trim() || !newItem.supplier || !newItem.price}
-                                    className="w-full gradient-green text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
-                                >
-                                    {loading ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <span className="spinner"></span>
-                                            Adding...
-                                        </span>
-                                    ) : (
-                                        '➕ Add Item'
-                                    )}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    {/* Current Suppliers List */}
-                    <div className="bg-white rounded-xl shadow-lg p-6">
-                        <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                            Current Suppliers ({suppliers.length})
-                        </h3>
-                        {suppliers.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">
-                                <div className="text-4xl mb-4">🤷‍♂️</div>
-                                <p>No suppliers found. Add your first supplier above!</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {suppliers.map((supplier) => (
-                                    <div 
-                                        key={supplier.id} 
-                                        onClick={() => handleSupplierClick(supplier)}
-                                        className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:scale-105 transition-all duration-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300"
-                                    >
-                                        <div className="font-semibold text-gray-800 text-lg mb-1">
-                                            {supplier.name}
-                                        </div>
-                                        <div className="text-sm text-gray-600 mb-2">
-                                            {supplier.product_count || 0} items
-                                        </div>
-                                        <div className="text-xs text-blue-600 font-medium">
-                                            Click to view items →
-                                        </div>
+                                            <button
+                                                type="submit"
+                                                disabled={loading || !newItem.description.trim() || !newItem.supplier || !newItem.price}
+                                                className={`w-full py-4 px-6 rounded-2xl font-bold text-lg transition-all duration-300 transform focus:outline-none focus:ring-4 focus:ring-success-200 ${
+                                                    loading || !newItem.description.trim() || !newItem.supplier || !newItem.price
+                                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                                        : 'gradient-green text-white hover:scale-105 hover:shadow-large active:scale-[1.02] shadow-soft'
+                                                }`}
+                                            >
+                                                {loading ? (
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        <span className="spinner w-5 h-5"></span>
+                                                        Adding Item...
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Item
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </form>
                                     </div>
-                                ))}
+                                </div>
                             </div>
-                        )}
-                    </div>
+
+                            {/* Current Suppliers List */}
+                            <div className="card p-8 animate-slide-up">
+                                <div className="flex items-center gap-3 mb-8">
+                                    <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center shadow-soft">
+                                        <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-gray-800">Current Suppliers</h3>
+                                        <p className="text-gray-600">
+                                            {suppliers.length} {suppliers.length === 1 ? 'supplier' : 'suppliers'} configured
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {suppliers.length === 0 ? (
+                                    <div className="text-center py-16">
+                                        <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">
+                                            <svg className="w-10 h-10 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <h4 className="text-xl font-semibold text-gray-700 mb-3">No suppliers yet</h4>
+                                        <p className="text-gray-500 max-w-md mx-auto">
+                                            Get started by adding your first supplier using the form above. Suppliers help organize your product catalog and pricing.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                        {suppliers.map((supplier) => (
+                                            <div
+                                                key={supplier.id}
+                                                onClick={() => handleSupplierClick(supplier)}
+                                                className="group bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-medium hover:border-primary-200 transition-all duration-300 cursor-pointer transform hover:scale-102 card-interactive"
+                                            >
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-secondary-100 rounded-xl flex items-center justify-center group-hover:from-primary-200 group-hover:to-secondary-200 transition-colors duration-300">
+                                                        <svg className="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
+                                                            <path fillRule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-bold text-gray-800 text-lg truncate group-hover:text-primary-700 transition-colors duration-300">
+                                                            {supplier.name}
+                                                        </h4>
+                                                        <p className="text-sm text-gray-500 font-medium">
+                                                            {supplier.product_count || 0} {supplier.product_count === 1 ? 'item' : 'items'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-primary-600 font-medium text-sm group-hover:text-primary-700 transition-colors duration-300">
+                                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                        View Items
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </>
                     )}
 

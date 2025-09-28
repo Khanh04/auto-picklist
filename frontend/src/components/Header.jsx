@@ -94,30 +94,35 @@ function Header() {
 
   return (
     <>
-      <header className="px-4 py-6">
+      <header className="px-4 py-8 relative">
         {/* Navigation Bar */}
-        <nav className="max-w-6xl mx-auto flex items-center justify-between mb-8">
-          <div className="flex items-center gap-8">
-            <h1 className="text-2xl font-bold text-white">
-              Auto Picklist
-            </h1>
-            <div className="hidden md:flex items-center gap-6">
+        <nav className="max-w-6xl mx-auto flex items-center justify-between mb-12 relative z-10">
+          <div className="flex items-center gap-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20">
+                <span className="text-xl font-bold text-white">📋</span>
+              </div>
+              <h1 className="text-2xl font-bold text-white tracking-tight">
+                Auto Picklist
+              </h1>
+            </div>
+            <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl p-1.5 border border-white/20">
               <button
                 onClick={() => navigate('/')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 ${
                   currentView === 'upload'
-                    ? 'bg-white text-blue-600 shadow-md'
-                    : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
+                    ? 'bg-white text-primary-600 shadow-soft transform scale-105'
+                    : 'text-white/90 hover:text-white hover:bg-white/10 transform hover:scale-102'
                 }`}
               >
                 Upload
               </button>
               <button
                 onClick={() => navigate('/database')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 ${
                   currentView === 'database'
-                    ? 'bg-white text-blue-600 shadow-md'
-                    : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
+                    ? 'bg-white text-primary-600 shadow-soft transform scale-105'
+                    : 'text-white/90 hover:text-white hover:bg-white/10 transform hover:scale-102'
                 }`}
               >
                 Database
@@ -126,73 +131,50 @@ function Header() {
           </div>
 
           {/* Authentication Section */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {isAuthenticated ? (
               // Authenticated user menu
-              <>
+              <div className="flex items-center gap-3">
                 {!isMobile && (
-                  <span className="text-white opacity-90 text-sm">
-                    {user?.firstName} {user?.lastName}
-                  </span>
+                  <div className="text-right">
+                    <div className="text-white/90 text-sm font-medium">
+                      {user?.firstName} {user?.lastName}
+                    </div>
+                    <div className="text-white/60 text-xs">
+                      Welcome back
+                    </div>
+                  </div>
                 )}
-                <IconButton
+                <button
                   onClick={handleUserMenuClick}
-                  sx={{
-                    p: 0.5,
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)'
-                    }
-                  }}
+                  className="relative group"
                 >
-                  <Avatar
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      bgcolor: 'rgba(255, 255, 255, 0.2)',
-                      color: 'white',
-                      fontSize: '0.875rem',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {getInitials()}
-                  </Avatar>
-                </IconButton>
-              </>
+                  <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20 group-hover:bg-white/30 transition-all duration-300 group-hover:scale-105">
+                    <span className="text-sm font-bold text-white">
+                      {getInitials()}
+                    </span>
+                  </div>
+                  <div className="absolute -inset-1 bg-white/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+                </button>
+              </div>
             ) : (
               // Login/Register buttons
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Button
+              <div className="flex items-center gap-3">
+                <button
                   onClick={handleOpenLogin}
-                  startIcon={<LoginIcon />}
-                  sx={{
-                    color: 'white',
-                    borderColor: 'rgba(255, 255, 255, 0.3)',
-                    '&:hover': {
-                      borderColor: 'white',
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)'
-                    }
-                  }}
-                  variant="outlined"
-                  size="small"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/30 text-white/90 hover:text-white hover:border-white/50 hover:bg-white/10 transition-all duration-300 font-medium text-sm backdrop-blur-sm transform hover:scale-102"
                 >
-                  {isMobile ? '' : 'Sign In'}
-                </Button>
-                <Button
+                  <LoginIcon fontSize="small" />
+                  {!isMobile && 'Sign In'}
+                </button>
+                <button
                   onClick={handleOpenRegister}
-                  startIcon={<PersonAdd />}
-                  sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    color: 'white',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.3)'
-                    }
-                  }}
-                  variant="contained"
-                  size="small"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/20 border border-white/20 text-white hover:bg-white/30 transition-all duration-300 font-medium text-sm backdrop-blur-sm transform hover:scale-102 hover:shadow-glow"
                 >
-                  {isMobile ? '' : 'Sign Up'}
-                </Button>
-              </Box>
+                  <PersonAdd fontSize="small" />
+                  {!isMobile && 'Sign Up'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -205,7 +187,7 @@ function Header() {
                   if (e.target.value === 'upload') navigate('/')
                   else navigate(`/${e.target.value}`)
                 }}
-                className="bg-white bg-opacity-20 text-white rounded-lg px-3 py-2 text-sm font-medium border border-white border-opacity-30"
+                className="bg-white/20 backdrop-blur-sm text-white rounded-xl px-4 py-2.5 text-sm font-medium border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
               >
                 <option value="upload" className="text-gray-800">Upload</option>
                 <option value="database" className="text-gray-800">Database</option>
@@ -214,14 +196,37 @@ function Header() {
           )}
         </nav>
 
+        {/* Decorative Elements */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <div className="absolute top-10 left-1/4 w-32 h-32 bg-white/5 rounded-full blur-3xl"></div>
+          <div className="absolute top-20 right-1/4 w-48 h-48 bg-white/3 rounded-full blur-3xl"></div>
+        </div>
+
         {/* Main Header Content */}
-        <div className="text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 drop-shadow-lg">
-            Auto Picklist Generator
-          </h2>
-          <p className="text-lg md:text-xl text-white opacity-90 max-w-2xl mx-auto">
+        <div className="text-center relative z-10 animate-fade-in">
+          <div className="mb-6">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight leading-tight">
+              <span className="inline-block animate-slide-up">Auto Picklist Generator</span>
+            </h2>
+            <div className="w-24 h-1 bg-white/30 rounded-full mx-auto mb-6"></div>
+          </div>
+          <p className="text-lg md:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed font-medium">
             Upload your CSV order file and get an optimized picklist with the best suppliers and prices
           </p>
+          <div className="mt-8 flex items-center justify-center gap-8 text-white/60 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse-subtle"></div>
+              <span>Intelligent Matching</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse-subtle"></div>
+              <span>Multi-Supplier Support</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse-subtle"></div>
+              <span>Real-time Processing</span>
+            </div>
+          </div>
         </div>
       </header>
 

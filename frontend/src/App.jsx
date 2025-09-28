@@ -131,11 +131,20 @@ function AppContent() {
     <div className="min-h-screen gradient-bg">
       <Header />
       <main className="flex-1">
-        <div className="max-w-2xl mx-auto p-8">
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-            <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
-              <span className="spinner"></span>
-              Processing your file...
+        <div className="max-w-2xl mx-auto p-8 animate-fade-in">
+          <div className="card p-12 text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary-50/50 to-secondary-50/50 opacity-60"></div>
+            <div className="relative">
+              <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center shadow-soft animate-pulse-subtle">
+                <span className="spinner w-8 h-8 border-3 border-white"></span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-3">Processing your files</h3>
+              <p className="text-gray-600 mb-6">Please wait while we analyze and optimize your picklist...</p>
+              <div className="flex justify-center gap-2">
+                <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
             </div>
           </div>
         </div>
@@ -181,7 +190,7 @@ function AppContent() {
   // Shopping List Page Component - creates/redirects to shared shopping list
   const ShoppingListPage = () => {
     const { picklist: currentPicklist } = usePicklist()
-    
+
     React.useEffect(() => {
       if (!currentPicklist || currentPicklist.length === 0) {
         navigate('/')
@@ -200,17 +209,26 @@ function AppContent() {
 
       createSharedList()
     }, [currentPicklist, navigate])
-    
+
     // Show loading while redirecting
     return (
       <div className="min-h-screen gradient-bg">
         <Header />
         <main className="flex-1">
-          <div className="max-w-2xl mx-auto p-8">
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="gradient-bg text-white px-8 py-4 rounded-lg inline-flex items-center justify-center gap-3 cursor-not-allowed opacity-75">
-                <span className="spinner"></span>
-                Creating shopping list...
+          <div className="max-w-2xl mx-auto p-8 animate-fade-in">
+            <div className="card p-12 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-success-50/50 to-primary-50/50 opacity-60"></div>
+              <div className="relative">
+                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-success-500 to-primary-500 rounded-2xl flex items-center justify-center shadow-soft animate-pulse-subtle">
+                  <span className="spinner w-8 h-8 border-3 border-white"></span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">Creating shopping list</h3>
+                <p className="text-gray-600 mb-6">Setting up your personalized shopping experience...</p>
+                <div className="flex justify-center gap-2">
+                  <div className="w-2 h-2 bg-success-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-success-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-2 h-2 bg-success-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                </div>
               </div>
             </div>
           </div>
