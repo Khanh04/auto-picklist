@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { usePicklistSync } from '../hooks/usePicklistSync'
 import { usePicklistData } from '../hooks/usePicklistData'
 import { useBulkEdit } from '../hooks/useBulkEdit'
@@ -14,8 +15,13 @@ import ExportResultsPanel from './Export/ExportResultsPanel'
 import ActionButtons from './Export/ActionButtons'
 
 function PicklistPreview({ results, onBack, onNavigate }) {
+  const location = useLocation()
   const [initialDataFetched, setInitialDataFetched] = useState(false)
   const [lastProcessedPicklistHash, setLastProcessedPicklistHash] = useState('')
+
+  // Check if we have draft data from navigation state
+  const draftData = location.state
+  const isDraftRestore = draftData?.isDraft && draftData?.metadata
 
   // Initialize picklist sync with centralized state management
   const {
@@ -25,6 +31,9 @@ function PicklistPreview({ results, onBack, onNavigate }) {
     setPicklist,
     loadInitialData
   } = usePicklistSync(null, {
+    draftKey: isDraftRestore ? draftData.metadata.draftKey : null,
+    title: isDraftRestore ? draftData.metadata.title : results?.filename,
+    sourceFileName: isDraftRestore ? draftData.metadata.sourceFileName : results?.filename,
     onPicklistUpdate: null // We'll handle updates through context now
   })
 

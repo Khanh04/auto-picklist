@@ -385,6 +385,31 @@ class ApiClient {
   async updateUserPreferences(preferences) {
     return this.put('/api/auth/preferences', preferences);
   }
+
+  // Draft Picklist Methods
+  async saveDraftPicklist(draftData) {
+    return this.post('/api/drafts', draftData);
+  }
+
+  async getUserDrafts(limit = 10, offset = 0) {
+    return this.get(`/api/drafts?limit=${limit}&offset=${offset}`);
+  }
+
+  async getDraft(draftKey) {
+    return this.get(`/api/drafts/${draftKey}`);
+  }
+
+  async updateDraft(draftKey, draftData) {
+    return this.put(`/api/drafts/${draftKey}`, draftData);
+  }
+
+  async deleteDraft(draftKey) {
+    return this.delete(`/api/drafts/${draftKey}`);
+  }
+
+  async promoteDraftToSharedList(draftKey, title) {
+    return this.post(`/api/drafts/${draftKey}/promote`, { title });
+  }
 }
 
 // Create singleton instance

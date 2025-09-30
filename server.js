@@ -22,6 +22,7 @@ const picklistRoutes = require('./src/routes/picklist');
 const shoppingListRoutes = require('./src/routes/shoppingList');
 const databaseRoutes = require('./src/routes/database');
 const multiCsvRoutes = require('./src/routes/multiCsv');
+const draftsRoutes = require('./src/routes/drafts');
 const createAuthRoutes = require('./src/routes/auth');
 const createAuthMiddleware = require('./src/middleware/auth');
 
@@ -153,6 +154,7 @@ app.use('/api/picklist', authMiddleware.authenticateRequired, picklistRoutes);
 app.use('/api/shopping-list', authMiddleware.authenticateRequired, shoppingListRoutes);
 app.use('/api/database', authMiddleware.authenticateRequired, databaseRoutes);
 app.use('/api/multi-csv', authMiddleware.authenticateRequired, multiCsvRoutes);
+app.use('/api/drafts', authMiddleware.authenticateRequired, draftsRoutes);
 
 // Legacy API endpoints for backward compatibility - require authentication
 app.get('/api/get-preference/:originalItem', authMiddleware.authenticateRequired, (req, res, next) => {

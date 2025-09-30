@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../utils/apiClient';
+import DraftRecoveryPanel from './DraftRecoveryPanel';
 
 const PickListsDashboard = () => {
   const navigate = useNavigate();
@@ -584,6 +585,9 @@ const PickListsDashboard = () => {
           />
         </Grid>
       </Grid>
+
+      {/* Draft Recovery Panel */}
+      <DraftRecoveryPanel />
 
       {/* Search and Filters */}
       <Fade in timeout={1000}>

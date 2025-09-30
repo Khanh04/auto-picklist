@@ -8,7 +8,10 @@ export const usePicklistSync = (shareId = null, options = {}) => {
   const {
     broadcastUpdate = null,
     onPicklistUpdate = null,
-    suppressWebSocket = false
+    suppressWebSocket = false,
+    draftKey: currentDraftKey = null,
+    title = null,
+    sourceFileName = null
   } = options;
 
   const { 
@@ -21,7 +24,14 @@ export const usePicklistSync = (shareId = null, options = {}) => {
     lastUpdated
   } = usePicklist();
 
-  const { persistPicklist, loadPicklist } = usePicklistPersistence(shareId);
+  const {
+    persistPicklist,
+    loadPicklist,
+    currentDraftKey: draftKeyFromHook,
+    setCurrentDraftKey,
+    isDraft,
+    isShared
+  } = usePicklistPersistence(shareId, currentDraftKey);
   const lastPersistedTime = useRef(0);
 
   // Auto-persist when picklist changes (debounced)
@@ -30,18 +40,34 @@ export const usePicklistSync = (shareId = null, options = {}) => {
       return; // No changes to persist
     }
 
+    const saveStrategy = shareId ? 'immediate' : 'draft';
+    const debounceTime = shareId ? 300 : 2000; // 2s for drafts, 300ms for shared
+
     const timeoutId = setTimeout(async () => {
       try {
         setLoading(true);
-        const result = await persistPicklist(picklist);
-        
+        const result = await persistPicklist(picklist, {
+          title: title || 'Draft Picklist',
+          sourceFileName: sourceFileName || null
+        });
+
         if (result.success) {
           lastPersistedTime.current = Date.now();
-          devLog('✅ Auto-persisted picklist changes');
-          
-          // Notify parent component of changes (for non-shared lists)
-          if (onPicklistUpdate && !shareId) {
-            onPicklistUpdate(picklist);
+
+          // Update draft key if this is a new draft
+          if (result.draftKey && !draftKeyFromHook) {
+            setCurrentDraftKey(result.draftKey);
+          }
+
+          devLog(`✅ Auto-persisted picklist (${saveStrategy}):`, result.draftKey || shareId);
+
+          // Notify parent component of changes
+          if (onPicklistUpdate) {
+            onPicklistUpdate(picklist, {
+              draftKey: result.draftKey,
+              lastSavedAt: result.lastSavedAt,
+              saveStrategy
+            });
           }
         } else {
           setError(result.error);
@@ -51,10 +77,11 @@ export const usePicklistSync = (shareId = null, options = {}) => {
       } finally {
         setLoading(false);
       }
-    }, 300); // 300ms debounce
+    }, debounceTime);
 
     return () => clearTimeout(timeoutId);
-  }, [lastUpdated, picklist, persistPicklist, setLoading, setError, onPicklistUpdate, shareId]);
+  }, [lastUpdated, picklist, persistPicklist, setLoading, setError, onPicklistUpdate,
+      shareId, title, sourceFileName, draftKeyFromHook, setCurrentDraftKey]);
 
   // Load initial data
   const loadInitialData = useCallback(async () => {
@@ -73,6 +100,29 @@ export const usePicklistSync = (shareId = null, options = {}) => {
       setLoading(false);
     }
   }, [loadPicklist, setPicklist, setLoading, setError]);
+
+  // Add periodic force-save for drafts (every 30 seconds)
+  useEffect(() => {
+    if (shareId) return; // Only for drafts (non-shared lists)
+
+    const interval = setInterval(async () => {
+      if (picklist?.length > 0) {
+        try {
+          const result = await persistPicklist(picklist, {
+            title: title || 'Draft Picklist',
+            sourceFileName: sourceFileName || null
+          });
+          if (result.success) {
+            devLog('🔄 Periodic draft save completed:', result.draftKey);
+          }
+        } catch (error) {
+          console.error('❌ Periodic save failed:', error);
+        }
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [shareId, picklist, persistPicklist, title, sourceFileName]);
 
   // Enhanced update functions with persistence and broadcasting
   const updateItemSync = useCallback(async (index, changes, broadcastOptions = {}) => {
@@ -136,11 +186,14 @@ export const usePicklistSync = (shareId = null, options = {}) => {
   const forcePersist = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await persistPicklist(picklist);
+      const result = await persistPicklist(picklist, {
+        title: title || 'Draft Picklist',
+        sourceFileName: sourceFileName || null
+      });
       if (result.success) {
         lastPersistedTime.current = Date.now();
         devLog('✅ Force persisted picklist');
-        return { success: true };
+        return { success: true, draftKey: result.draftKey };
       } else {
         setError(result.error);
         return { success: false, error: result.error };
@@ -151,21 +204,27 @@ export const usePicklistSync = (shareId = null, options = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [persistPicklist, picklist, setLoading, setError]);
+  }, [persistPicklist, picklist, setLoading, setError, title, sourceFileName]);
 
   return {
     // State
     picklist,
-    
+
     // Actions
     updateItem: updateItemSync,
     updateMultipleItems: updateMultipleItemsSync,
     setPicklist,
-    
+
     // Utilities
     loadInitialData,
     forcePersist,
-    
+
+    // Draft management
+    currentDraftKey: draftKeyFromHook,
+    setCurrentDraftKey,
+    isDraft,
+    isShared,
+
     // State flags
     lastUpdated
   };

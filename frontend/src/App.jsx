@@ -185,19 +185,32 @@ function AppContent() {
   )
 
   // Preview Page Component
-  const PreviewPage = () => (
-    <div className="min-h-screen gradient-bg">
-      <Header />
-      <main className="flex-1">
-        <PicklistPreview
-          results={results}
-          onBack={handleReset}
-          onNavigate={(view) => navigate(`/${view}`)}
-        />
-      </main>
-      <Footer />
-    </div>
-  )
+  const PreviewPage = () => {
+    const location = useLocation();
+    const draftData = location.state;
+
+    // Use draft data if available, otherwise use regular results
+    const previewResults = draftData?.picklist ? {
+      picklist: draftData.picklist,
+      filename: draftData.metadata?.sourceFileName || 'Draft',
+      intelligent: true,
+      useDatabase: true
+    } : results;
+
+    return (
+      <div className="min-h-screen gradient-bg">
+        <Header />
+        <main className="flex-1">
+          <PicklistPreview
+            results={previewResults}
+            onBack={handleReset}
+            onNavigate={(view) => navigate(`/${view}`)}
+          />
+        </main>
+        <Footer />
+      </div>
+    );
+  };
 
   // Shopping List Page Component - creates/redirects to shared shopping list
   const ShoppingListPage = () => {
