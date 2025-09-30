@@ -9,7 +9,7 @@ const SupplierRepository = require('../repositories/SupplierRepository');
  */
 class UserFirstMatchingService extends MatchingService {
     constructor(userId = null) {
-        super();
+        super(userId);
         this.supplierPreferenceRepository = new SupplierPreferenceRepository(userId);
         this.productRepository = new ProductRepository(userId);
         this.supplierRepository = new SupplierRepository(userId);
@@ -22,6 +22,7 @@ class UserFirstMatchingService extends MatchingService {
      */
     setUserContext(userId) {
         this.userId = userId;
+        super.setUserContext(userId);
         this.supplierPreferenceRepository.setUserContext(userId);
         this.productRepository.setUserContext(userId);
         this.supplierRepository.setUserContext(userId);

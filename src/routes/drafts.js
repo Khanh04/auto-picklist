@@ -64,7 +64,7 @@ router.post('/',
         const sessionId = getSessionId(req);
         const finalDraftKey = draftKey || crypto.randomBytes(16).toString('hex');
 
-        // Process and clean picklist data
+        // Process and clean picklist data - preserve preference information
         const cleanPicklist = picklist.map(item => ({
             originalItem: item.originalItem || item.item,
             matchedDescription: item.matchedDescription,
@@ -72,7 +72,11 @@ router.post('/',
             quantity: item.quantity,
             selectedSupplier: item.selectedSupplier,
             unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice
+            totalPrice: item.totalPrice,
+            // Preserve preference and override information
+            isPreference: item.isPreference || false,
+            frequency: item.frequency || 0,
+            manualOverride: item.manualOverride || false
         }));
 
         try {
@@ -232,7 +236,7 @@ router.put('/:draftKey',
         const { draftKey } = req.params;
         const { picklist, title } = req.body;
 
-        // Process and clean picklist data
+        // Process and clean picklist data - preserve preference information
         const cleanPicklist = picklist.map(item => ({
             originalItem: item.originalItem || item.item,
             matchedDescription: item.matchedDescription,
@@ -240,7 +244,11 @@ router.put('/:draftKey',
             quantity: item.quantity,
             selectedSupplier: item.selectedSupplier,
             unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice
+            totalPrice: item.totalPrice,
+            // Preserve preference and override information
+            isPreference: item.isPreference || false,
+            frequency: item.frequency || 0,
+            manualOverride: item.manualOverride || false
         }));
 
         const result = await pool.query(`

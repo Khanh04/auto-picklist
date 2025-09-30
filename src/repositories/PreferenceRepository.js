@@ -26,16 +26,20 @@ class PreferenceRepository extends BaseRepository {
      * @returns {Promise<Object|null>} Preference or null if not found
      */
     async getByOriginalItem(originalItem) {
+        if (!this.userId) {
+            throw new Error('User context required for preference lookup. Call setUserContext(userId) first.');
+        }
+
         const query = `
             SELECT mp.matched_product_id, mp.frequency, p.description
             FROM matching_preferences mp
             JOIN products p ON mp.matched_product_id = p.id
-            WHERE LOWER(mp.original_item) = LOWER($1)
+            WHERE LOWER(mp.original_item) = LOWER($1) AND mp.user_id = $2
             ORDER BY mp.frequency DESC, mp.last_used DESC
             LIMIT 1
         `;
-        
-        const result = await this.query(query, [originalItem]);
+
+        const result = await this.query(query, [originalItem, this.userId]);
         return result.rows[0] || null;
     }
 
@@ -46,17 +50,21 @@ class PreferenceRepository extends BaseRepository {
      * @returns {Promise<Object>} Created or updated preference
      */
     async upsert(originalItem, matchedProductId) {
+        if (!this.userId) {
+            throw new Error('User context required for preference upsert. Call setUserContext(userId) first.');
+        }
+
         const query = `
-            INSERT INTO matching_preferences (original_item, matched_product_id, frequency, last_used)
-            VALUES ($1, $2, 1, CURRENT_TIMESTAMP)
-            ON CONFLICT (original_item, matched_product_id)
-            DO UPDATE SET 
+            INSERT INTO matching_preferences (original_item, matched_product_id, user_id, frequency, last_used)
+            VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT (original_item, matched_product_id, user_id)
+            DO UPDATE SET
                 frequency = matching_preferences.frequency + 1,
                 last_used = CURRENT_TIMESTAMP
             RETURNING *
         `;
-        
-        const result = await this.query(query, [originalItem, matchedProductId]);
+
+        const result = await this.query(query, [originalItem, matchedProductId, this.userId]);
         return result.rows[0];
     }
 
@@ -68,24 +76,28 @@ class PreferenceRepository extends BaseRepository {
     async batchUpsert(preferences) {
         if (!preferences.length) return [];
 
+        if (!this.userId) {
+            throw new Error('User context required for batch preference upsert. Call setUserContext(userId) first.');
+        }
+
         return await this.transaction(async (client) => {
             const results = [];
-            
+
             for (const pref of preferences) {
                 const query = `
-                    INSERT INTO matching_preferences (original_item, matched_product_id, frequency, last_used)
-                    VALUES ($1, $2, 1, CURRENT_TIMESTAMP)
-                    ON CONFLICT (original_item, matched_product_id)
-                    DO UPDATE SET 
+                    INSERT INTO matching_preferences (original_item, matched_product_id, user_id, frequency, last_used)
+                    VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT (original_item, matched_product_id, user_id)
+                    DO UPDATE SET
                         frequency = matching_preferences.frequency + 1,
                         last_used = CURRENT_TIMESTAMP
                     RETURNING *
                 `;
-                
-                const result = await client.query(query, [pref.originalItem, pref.matchedProductId]);
+
+                const result = await client.query(query, [pref.originalItem, pref.matchedProductId, this.userId]);
                 results.push(result.rows[0]);
             }
-            
+
             return results;
         });
     }
@@ -96,8 +108,12 @@ class PreferenceRepository extends BaseRepository {
      * @returns {Promise<boolean>} True if deleted successfully
      */
     async deleteById(preferenceId) {
-        const query = 'DELETE FROM matching_preferences WHERE id = $1';
-        const result = await this.query(query, [preferenceId]);
+        if (!this.userId) {
+            throw new Error('User context required for preference deletion. Call setUserContext(userId) first.');
+        }
+
+        const query = 'DELETE FROM matching_preferences WHERE id = $1 AND user_id = $2';
+        const result = await this.query(query, [preferenceId, this.userId]);
         return result.rowCount > 0;
     }
 
