@@ -111,7 +111,7 @@ function createAuthRoutes(db, authMiddleware) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 15 * 60 * 1000 // 15 minutes to match JWT expiry
+        maxAge: 60 * 60 * 1000 // 60 minutes to match JWT expiry
       });
 
       // Also set refresh token as httpOnly cookie

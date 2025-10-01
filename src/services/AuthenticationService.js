@@ -13,7 +13,7 @@ class AuthenticationService {
     this.db = db;
     this.config = {
       jwtSecret: config.jwtSecret || process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      jwtExpiresIn: config.jwtExpiresIn || '15m',
+      jwtExpiresIn: config.jwtExpiresIn || '60m',
       refreshTokenExpiresIn: config.refreshTokenExpiresIn || '7d',
       bcryptRounds: config.bcryptRounds || 12,
       maxFailedAttempts: config.maxFailedAttempts || 5,
