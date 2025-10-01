@@ -42,7 +42,7 @@ describe('Picklist Routes', () => {
 
     // Mock PicklistService
     mockPicklistService = {
-      createPicklistFromDatabase: jest.fn(),
+      createIntelligentPicklist: jest.fn(),
       calculateSummary: jest.fn(),
       validatePicklist: jest.fn(),
       exportPicklist: jest.fn()
@@ -85,7 +85,7 @@ describe('Picklist Routes', () => {
 
     it('should upload CSV file and generate picklist using database', async () => {
       mockAutoPicklistApp.parseCSV.mockResolvedValue(['Item1', 'Item2']);
-      mockPicklistService.createPicklistFromDatabase.mockResolvedValue(mockPicklist);
+      mockPicklistService.createIntelligentPicklist.mockResolvedValue(mockPicklist);
       mockPicklistService.calculateSummary.mockReturnValue(mockSummary);
       mockPicklistService.validatePicklist.mockReturnValue(mockValidation);
 
@@ -105,7 +105,7 @@ describe('Picklist Routes', () => {
       const pdfPath = createTestFile('test.pdf', 'PDF content');
       
       mockAutoPicklistApp.parsePDF.mockResolvedValue(['Item1', 'Item2']);
-      mockPicklistService.createPicklistFromDatabase.mockResolvedValue(mockPicklist);
+      mockPicklistService.createIntelligentPicklist.mockResolvedValue(mockPicklist);
       mockPicklistService.calculateSummary.mockReturnValue(mockSummary);
       mockPicklistService.validatePicklist.mockReturnValue(mockValidation);
 

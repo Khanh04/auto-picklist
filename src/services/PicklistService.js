@@ -1,10 +1,8 @@
-const MatchingService = require('./MatchingService');
 const UserFirstMatchingService = require('./UserFirstMatchingService');
 
 class PicklistService {
     constructor(userId = null) {
-        this.matchingService = new MatchingService(userId);
-        this.userFirstMatchingService = new UserFirstMatchingService(userId);
+        this.matchingService = new UserFirstMatchingService(userId);
         this.userId = userId;
     }
 
@@ -14,40 +12,9 @@ class PicklistService {
      */
     setUserContext(userId) {
         this.userId = userId;
-        this.matchingService.setUserContext && this.matchingService.setUserContext(userId);
-        this.userFirstMatchingService.setUserContext(userId);
+        this.matchingService.setUserContext(userId);
     }
 
-    /**
-     * Create a picklist from order items using database matching (legacy method)
-     * @param {Array} orderItems - Array of {item, quantity}
-     * @returns {Promise<Array>} Generated picklist
-     */
-    async createPicklistFromDatabase(orderItems) {
-        const picklist = [];
-
-        for (const orderItem of orderItems) {
-            const matchResult = await this.matchingService.matchWithPreferences(orderItem.item);
-
-            const picklistItem = {
-                quantity: orderItem.quantity,
-                item: orderItem.item,
-                originalItem: orderItem.item,
-                selectedSupplier: matchResult.supplier || 'back order',
-                unitPrice: matchResult.price || 'No price found',
-                totalPrice: matchResult.price ? (matchResult.price * orderItem.quantity).toFixed(2) : 'N/A',
-                matchedItemId: matchResult.productId,
-                matchedDescription: matchResult.description,
-                manualOverride: false,
-                isPreference: matchResult.isPreference || false,
-                frequency: matchResult.frequency || 0
-            };
-
-            picklist.push(picklistItem);
-        }
-
-        return picklist;
-    }
 
     /**
      * Create intelligent picklist with backend supplier selection (user-first approach)
@@ -57,8 +24,8 @@ class PicklistService {
     async createIntelligentPicklist(orderItems) {
         console.log(`🎯 Creating intelligent picklist for ${orderItems.length} items`);
 
-        // Use the new UserFirstMatchingService for complete backend processing
-        const picklist = await this.userFirstMatchingService.createIntelligentPicklist(orderItems);
+        // Use the intelligent matching service for complete backend processing
+        const picklist = await this.matchingService.createIntelligentPicklist(orderItems);
 
         console.log(`✅ Intelligent picklist completed with ${picklist.length} items`);
         return picklist;
@@ -74,7 +41,7 @@ class PicklistService {
      * @returns {Promise<Object>} Updated details
      */
     async updateSupplierSelection(originalItem, newSupplierId, matchedProductId = null) {
-        return await this.userFirstMatchingService.updateSupplierSelection(
+        return await this.matchingService.updateSupplierSelection(
             originalItem,
             newSupplierId,
             matchedProductId

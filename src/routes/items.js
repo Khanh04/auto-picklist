@@ -3,7 +3,7 @@ const router = express.Router();
 
 const ProductRepository = require('../repositories/ProductRepository');
 const SupplierRepository = require('../repositories/SupplierRepository');
-const MatchingService = require('../services/MatchingService');
+const UserFirstMatchingService = require('../services/UserFirstMatchingService');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateBody, validateParams } = require('../middleware/validation');
 const { enhancedAsyncHandler, createValidationError, createNotFoundError } = require('../middleware/enhancedErrorHandler');
@@ -121,7 +121,7 @@ router.post('/match',
             throw createValidationError(['description'], 'Description cannot be empty');
         }
 
-        const matchingService = new MatchingService(req.user?.id);
+        const matchingService = new UserFirstMatchingService(req.user?.id);
         const result = await matchingService.findBestSupplier(description.trim());
         
         if (result.supplier && result.price) {

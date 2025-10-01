@@ -2,9 +2,10 @@ const fs = require('fs');
 const { parseOrderItemsFromPDF } = require('./modules/pdfParser');
 const { parseOrderItemsFromEbayCSV, findEbayCSV } = require('./modules/ebayParser');
 const { loadPriceList } = require('./modules/priceListLoader');
-const { findBestSupplier, getDatabaseStats, testConnection } = require('./modules/databaseLoader');
+const { getDatabaseStats, testConnection } = require('./modules/databaseLoader');
 const { createPicklist, convertToCSV } = require('./modules/picklistGenerator');
 const { generatePDF, calculateSummary } = require('./modules/pdfGenerator');
+const PicklistService = require('./services/PicklistService');
 
 /**
  * Main application class for automated picklist generation
@@ -19,8 +20,12 @@ class AutoPicklistApp {
             excelInputPath: config.excelInputPath || 'GENERAL PRICE LIST.xlsx', // Fallback for legacy mode
             csvOutputPath: config.csvOutputPath || 'final_picklist.csv',
             pdfOutputPath: config.pdfOutputPath || 'final_picklist.pdf',
+            userId: config.userId || null, // User context for preferences
             ...config
         };
+
+        // Initialize modern picklist service
+        this.picklistService = new PicklistService(this.config.userId);
     }
 
     /**
@@ -77,9 +82,9 @@ class AutoPicklistApp {
                 const stats = await getDatabaseStats();
                 console.log(`Using PostgreSQL database (${stats.products} products, ${stats.suppliers} suppliers, ${stats.prices} prices)`);
                 
-                // Create picklist using database
-                console.log('Matching items and finding best suppliers...');
-                picklist = await this.createPicklistFromDatabase(orderItems);
+                // Create picklist using intelligent matching service
+                console.log('Matching items and finding best suppliers with user preferences...');
+                picklist = await this.picklistService.createIntelligentPicklist(orderItems);
             } else {
                 // Use Excel file (legacy mode)
                 const priceData = loadPriceList(this.config.excelInputPath);
@@ -125,34 +130,6 @@ class AutoPicklistApp {
         }
     }
 
-    /**
-     * Create picklist using database queries
-     * @param {Array} orderItems - Array of order items
-     * @returns {Promise<Array>} Final picklist with supplier selections
-     */
-    async createPicklistFromDatabase(orderItems) {
-        const picklist = [];
-
-        for (const orderItem of orderItems) {
-            const { supplier, price, productId, description } = await findBestSupplier(orderItem.item);
-            
-            const picklistItem = {
-                quantity: orderItem.quantity,
-                item: orderItem.item,
-                originalItem: orderItem.item, // Keep original for frontend
-                selectedSupplier: supplier || 'back order',
-                unitPrice: price || 'No price found',
-                totalPrice: price ? (price * orderItem.quantity).toFixed(2) : 'N/A',
-                matchedItemId: productId, // Include the matched product ID from backend
-                matchedDescription: description, // Include the matched description
-                manualOverride: false // Track if user manually selected an item
-            };
-
-            picklist.push(picklistItem);
-        }
-
-        return picklist;
-    }
 
     /**
      * Display generation summary

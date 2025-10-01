@@ -114,12 +114,12 @@ router.post('/upload',
                 });
 
             } else if (file.mimetype === 'application/pdf') {
-                // PDF processing still uses legacy approach
+                // PDF processing now uses intelligent matching
                 const userId = req.user ? req.user.id : null;
                 const pdfPicklistService = new PicklistService(userId);
 
                 const orderItems = await app.parsePDF(file.path);
-                result = await pdfPicklistService.createPicklistFromDatabase(orderItems);
+                result = await pdfPicklistService.createIntelligentPicklist(orderItems);
 
                 const summary = pdfPicklistService.calculateSummary(result);
                 const validation = pdfPicklistService.validatePicklist(result);
