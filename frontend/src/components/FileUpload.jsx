@@ -120,8 +120,8 @@ function FileUpload({ onFileUpload, onMultiFileUpload }) {
     <div className="max-w-3xl mx-auto p-8 animate-fade-in">
       <div className="card p-8 relative overflow-hidden">
         {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0" style={{
+        <div className="absolute inset-0 opacity-5 pointer-events-none">
+          <div className="absolute inset-0 pointer-events-none" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000' fill-opacity='0.1' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E")`,
           }}></div>
         </div>
