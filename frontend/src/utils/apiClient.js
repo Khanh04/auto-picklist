@@ -205,8 +205,15 @@ class ApiClient {
 
   /**
    * Upload file for picklist generation
+   * For CSV files, uses the unified endpoint for better user context support
    */
   async uploadPicklist(file, useDatabase = true) {
+    // For CSV files, use the unified endpoint for consistent matching
+    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv')) {
+      return this.uploadCSVFiles(file, useDatabase);
+    }
+
+    // For non-CSV files (like PDF), use the original endpoint
     const formData = new FormData();
     formData.append('file', file);
     formData.append('useDatabase', useDatabase.toString());
@@ -218,7 +225,18 @@ class ApiClient {
    * Upload file and generate intelligent picklist with user-first supplier selection
    */
   async uploadFileIntelligent(file) {
-    // First, parse the file to get order items
+    // For CSV files, use the unified endpoint which includes user preferences
+    if (file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv')) {
+      const result = await this.uploadCSVFiles(file, true);
+
+      // Mark as intelligent for compatibility
+      return {
+        ...result,
+        intelligent: true
+      };
+    }
+
+    // For non-CSV files, use the original intelligent processing
     const parseResult = await this.parseFileForItems(file);
     const { orderItems } = parseResult;
 
@@ -241,7 +259,21 @@ class ApiClient {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     formData.append('useDatabase', useDatabase.toString());
-    
+
+    return this.post('/api/multi-csv/upload', formData);
+  }
+
+  /**
+   * Unified CSV upload method - handles both single and multiple files
+   * Uses the merged endpoint for consistent user context and matching
+   */
+  async uploadCSVFiles(files, useDatabase = true) {
+    const fileArray = Array.isArray(files) ? files : [files];
+
+    const formData = new FormData();
+    fileArray.forEach(file => formData.append('files', file));
+    formData.append('useDatabase', useDatabase.toString());
+
     return this.post('/api/multi-csv/upload', formData);
   }
 

@@ -7,8 +7,9 @@ const path = require('path');
  * Service for handling multiple CSV files and generating combined summaries
  */
 class MultiCsvService {
-    constructor() {
-        this.picklistService = new PicklistService();
+    constructor(userId = null) {
+        this.userId = userId;
+        this.picklistService = new PicklistService(userId);
     }
 
     /**
@@ -52,10 +53,10 @@ class MultiCsvService {
                     continue;
                 }
 
-                // Generate individual picklist for this file
+                // Generate individual picklist for this file using intelligent matching
                 let individualPicklist;
                 if (useDatabase) {
-                    individualPicklist = await this.picklistService.createPicklistFromDatabase(orderItems);
+                    individualPicklist = await this.picklistService.createIntelligentPicklist(orderItems);
                 } else {
                     throw new Error('Legacy Excel mode not supported for multi-CSV import');
                 }
@@ -103,7 +104,7 @@ class MultiCsvService {
         const consolidatedItems = this.consolidateOrderItems(allOrderItems);
         
         if (useDatabase) {
-            results.combinedPicklist = await this.picklistService.createPicklistFromDatabase(consolidatedItems);
+            results.combinedPicklist = await this.picklistService.createIntelligentPicklist(consolidatedItems);
         }
 
         // Generate overall summary and analytics

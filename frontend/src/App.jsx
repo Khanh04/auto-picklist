@@ -42,15 +42,17 @@ function AppContent() {
       let result;
 
       if (useIntelligent) {
-        // Use new intelligent picklist generation with user-first supplier selection
+        // Use intelligent picklist generation with user preferences
+        // Note: For CSV files, this now uses the unified endpoint automatically
         devLog('Using intelligent picklist generation with user preferences...')
         result = await apiClient.uploadFileIntelligent(file)
         devLog('Intelligent upload result:', result)
       } else {
-        // Use legacy approach
-        devLog('Using legacy picklist generation...')
+        // Use standard approach with user context
+        // Note: For CSV files, this now uses the unified endpoint automatically
+        devLog('Using standard picklist generation with user context...')
         result = await apiClient.uploadPicklist(file, true)
-        devLog('Legacy upload result:', result)
+        devLog('Standard upload result:', result)
       }
 
       devLog('Picklist items:', result.picklist)
@@ -73,6 +75,7 @@ function AppContent() {
 
     try {
       devLog(`Uploading ${files.length} CSV files for combined processing...`)
+      // Note: Multi-CSV upload already uses the unified endpoint with user context
       const result = await apiClient.uploadMultipleCSV(files, true)
       devLog('Multi-CSV upload result:', result)
 

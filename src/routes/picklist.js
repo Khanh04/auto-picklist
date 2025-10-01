@@ -9,7 +9,8 @@ const { enhancedAsyncHandler, createValidationError } = require('../middleware/e
 const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateFileUpload, validateBody } = require('../middleware/validation');
 
-const picklistService = new PicklistService();
+// PicklistService will be created per request with user context for CSV files
+// PDF files still use this global instance for legacy compatibility
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -90,29 +91,52 @@ router.post('/upload',
         let result;
 
         if (useDatabase) {
-            // Use database matching
-            if (file.mimetype === 'application/pdf') {
+            // For CSV files, redirect to unified endpoint for consistent processing
+            if (file.mimetype === 'text/csv') {
+                // Use unified CSV processing with user context
+                const userId = req.user ? req.user.id : null;
+                const csvService = new (require('../services/MultiCsvService'))(userId);
+
+                const orderItems = await csvService.parseCSVFile(file.path);
+                result = await csvService.picklistService.createIntelligentPicklist(orderItems);
+
+                const summary = csvService.picklistService.calculateSummary(result);
+                const validation = csvService.picklistService.validatePicklist(result);
+
+                sendSuccessResponse(req, res, {
+                    picklist: result,
+                    summary,
+                    validation,
+                    filename: file.originalname,
+                    useDatabase: true
+                }, {
+                    message: 'Picklist generated successfully using database matching'
+                });
+
+            } else if (file.mimetype === 'application/pdf') {
+                // PDF processing still uses legacy approach
+                const userId = req.user ? req.user.id : null;
+                const pdfPicklistService = new PicklistService(userId);
+
                 const orderItems = await app.parsePDF(file.path);
-                result = await picklistService.createPicklistFromDatabase(orderItems);
-            } else if (file.mimetype === 'text/csv') {
-                const orderItems = await app.parseCSV(file.path);
-                result = await picklistService.createPicklistFromDatabase(orderItems);
+                result = await pdfPicklistService.createPicklistFromDatabase(orderItems);
+
+                const summary = pdfPicklistService.calculateSummary(result);
+                const validation = pdfPicklistService.validatePicklist(result);
+
+                sendSuccessResponse(req, res, {
+                    picklist: result,
+                    summary,
+                    validation,
+                    filename: file.originalname,
+                    useDatabase: true
+                }, {
+                    message: 'Picklist generated successfully using database matching'
+                });
+
             } else {
                 throw createValidationError(['file'], 'Unsupported file type');
             }
-
-            const summary = picklistService.calculateSummary(result);
-            const validation = picklistService.validatePicklist(result);
-
-            sendSuccessResponse(req, res, {
-                picklist: result,
-                summary,
-                validation,
-                filename: file.originalname,
-                useDatabase: true
-            }, {
-                message: 'Picklist generated successfully using database matching'
-            });
 
         } else {
             // Use legacy price list matching
@@ -145,9 +169,13 @@ router.post('/validate',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { picklist } = req.body;
-        
-        const validation = picklistService.validatePicklist(picklist);
-        const summary = picklistService.calculateSummary(picklist);
+
+        // Create service with user context
+        const userId = req.user ? req.user.id : null;
+        const validationService = new PicklistService(userId);
+
+        const validation = validationService.validatePicklist(picklist);
+        const summary = validationService.calculateSummary(picklist);
 
         sendSuccessResponse(req, res, {
             validation,
@@ -172,8 +200,12 @@ router.post('/export',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { picklist, format = 'csv' } = req.body;
-        
-        const exportedData = picklistService.exportPicklist(picklist, format);
+
+        // Create service with user context
+        const userId = req.user ? req.user.id : null;
+        const exportService = new PicklistService(userId);
+
+        const exportedData = exportService.exportPicklist(picklist, format);
         
         const contentType = format === 'json' ? 'application/json' : 'text/csv';
         const filename = `picklist_${Date.now()}.${format}`;

@@ -274,22 +274,25 @@ class MatchingService {
      */
     async matchWithPreferences(originalItem) {
         try {
-            // Check for unified preference first (includes both product and supplier)
-            const unifiedPreference = await this.itemPreferenceRepository.getPreference(originalItem);
+            // Only check for preferences if user context is available
+            if (this.userId && this.itemPreferenceRepository.userId) {
+                // Check for unified preference first (includes both product and supplier)
+                const unifiedPreference = await this.itemPreferenceRepository.getPreference(originalItem);
 
-            if (unifiedPreference) {
-                // Unified preference includes both product_id and supplier_id
-                return {
-                    supplier: unifiedPreference.supplier_name,
-                    price: null, // Will be filled in by the system that uses this
-                    productId: unifiedPreference.product_id,
-                    description: unifiedPreference.product_description,
-                    isPreference: true,
-                    frequency: unifiedPreference.frequency,
-                    // Additional unified preference data
-                    supplierId: unifiedPreference.supplier_id,
-                    isUnifiedPreference: true
-                };
+                if (unifiedPreference) {
+                    // Unified preference includes both product_id and supplier_id
+                    return {
+                        supplier: unifiedPreference.supplier_name,
+                        price: null, // Will be filled in by the system that uses this
+                        productId: unifiedPreference.product_id,
+                        description: unifiedPreference.product_description,
+                        isPreference: true,
+                        frequency: unifiedPreference.frequency,
+                        // Additional unified preference data
+                        supplierId: unifiedPreference.supplier_id,
+                        isUnifiedPreference: true
+                    };
+                }
             }
 
             // Fallback to automatic matching
@@ -301,7 +304,17 @@ class MatchingService {
 
         } catch (error) {
             console.error('Error in matchWithPreferences:', error);
-            return { supplier: null, price: null, productId: null, description: null, isPreference: false };
+            // Fallback to automatic matching if preferences fail
+            try {
+                const automaticMatch = await this.findBestSupplier(originalItem);
+                return {
+                    ...automaticMatch,
+                    isPreference: false
+                };
+            } catch (fallbackError) {
+                console.error('Error in fallback matching:', fallbackError);
+                return { supplier: null, price: null, productId: null, description: null, isPreference: false };
+            }
         }
     }
 }

@@ -9,7 +9,7 @@ const { enhancedAsyncHandler, createValidationError } = require('../middleware/e
 const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateFileUpload } = require('../middleware/validation');
 
-const multiCsvService = new MultiCsvService();
+// MultiCsvService will be created per request with user context
 
 // Configure multer for multiple file uploads
 const storage = multer.diskStorage({
@@ -46,7 +46,8 @@ const upload = multer({
 
 /**
  * POST /api/multi-csv/upload
- * Upload multiple CSV files and generate combined picklist
+ * Upload single or multiple CSV/PDF files and generate picklist
+ * Unified endpoint supporting both single and multi-file processing
  */
 router.post('/upload',
     upload.array('files', 10), // Accept up to 10 files with field name 'files'
@@ -54,18 +55,74 @@ router.post('/upload',
         const files = req.files;
         const useDatabase = req.body.useDatabase !== 'false'; // Default to true
 
+        // Extract user context (may be null for anonymous users)
+        const userId = req.user ? req.user.id : null;
+
         if (!files || files.length === 0) {
-            throw createValidationError(['files'], 'No CSV files uploaded');
+            throw createValidationError(['files'], 'No files uploaded');
         }
 
         if (files.length > 10) {
-            throw createValidationError(['files'], 'Maximum 10 CSV files allowed at once');
+            throw createValidationError(['files'], 'Maximum 10 files allowed at once');
         }
 
-        console.log(`Processing ${files.length} CSV files...`);
+        // Validate file types (only CSV supported)
+        for (const file of files) {
+            if (!file.mimetype.includes('csv') && !file.originalname.toLowerCase().endsWith('.csv')) {
+                throw createValidationError(['files'], `Unsupported file type: ${file.mimetype}. Only CSV files are supported.`);
+            }
+        }
+
+        console.log(`Processing ${files.length} CSV file(s) with user context: ${userId || 'anonymous'}...`);
 
         try {
-            // Process multiple CSV files
+            // Create service instance with user context
+            const multiCsvService = new MultiCsvService(userId);
+
+            // Handle single file case for backwards compatibility
+            if (files.length === 1) {
+                const file = files[0];
+
+                // For single file, return simpler structure similar to original /api/picklist/upload
+                const orderItems = await multiCsvService.parseCSVFile(file.path);
+                const picklist = await multiCsvService.picklistService.createIntelligentPicklist(orderItems);
+                const summary = multiCsvService.picklistService.calculateSummary(picklist);
+                const validation = multiCsvService.picklistService.validatePicklist(picklist);
+
+                // Return single file format for backwards compatibility
+                const response = {
+                    picklist,
+                    summary,
+                    validation,
+                    filename: file.originalname,
+                    useDatabase: true,
+                    itemCount: orderItems.length,
+                    // Also include multi-format structure for unified handling
+                    multiFormat: {
+                        success: true,
+                        files: [{
+                            filename: file.originalname,
+                            itemCount: orderItems.length,
+                            picklist: picklist,
+                            summary: summary
+                        }],
+                        combinedPicklist: picklist,
+                        overallSummary: summary,
+                        metadata: {
+                            filesProcessed: 1,
+                            totalItems: orderItems.length,
+                            processingTime: Date.now()
+                        }
+                    }
+                };
+
+                sendSuccessResponse(req, res, response, {
+                    message: `Successfully processed ${orderItems.length} items from ${file.originalname}`
+                });
+                return;
+            }
+
+            // Handle multiple files case
             const results = await multiCsvService.processMultipleCSVs(files, useDatabase);
 
             // Clean up uploaded files
@@ -109,10 +166,15 @@ router.post('/export',
     enhancedAsyncHandler(async (req, res) => {
         const { results, format = 'csv' } = req.body;
 
+        // Extract user context (may be null for anonymous users)
+        const userId = req.user ? req.user.id : null;
+
         if (!results || !results.combinedPicklist) {
             throw createValidationError(['results'], 'No processing results provided');
         }
 
+        // Create service instance with user context
+        const multiCsvService = new MultiCsvService(userId);
         const exportedData = multiCsvService.exportCombinedResults(results, format);
         
         // Set appropriate headers based on format
@@ -149,11 +211,17 @@ router.post('/analyze',
     enhancedAsyncHandler(async (req, res) => {
         const files = req.files;
 
+        // Extract user context (may be null for anonymous users)
+        const userId = req.user ? req.user.id : null;
+
         if (!files || files.length === 0) {
             throw createValidationError(['files'], 'No CSV files uploaded');
         }
 
         try {
+            // Create service instance with user context
+            const multiCsvService = new MultiCsvService(userId);
+
             const analysis = {
                 files: [],
                 totalItems: 0,
@@ -256,8 +324,10 @@ router.get('/templates', enhancedAsyncHandler(async (req, res) => {
             'CSV files should have headers in the first row',
             'Quantity columns: quantity, qty, amount, count, pieces, pcs',
             'Item columns: title, item, product, name, description, sku, part',
+            'Supports both single CSV file and multiple CSV files',
             'Multiple CSV files will be automatically consolidated',
-            'Maximum 10 files per upload, 10MB per file'
+            'Maximum 10 files per upload, 10MB per file',
+            'Uses advanced database matching with user preference support'
         ]
     });
 }));
