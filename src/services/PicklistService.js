@@ -1,14 +1,10 @@
 const MatchingService = require('./MatchingService');
 const UserFirstMatchingService = require('./UserFirstMatchingService');
-const PreferenceRepository = require('../repositories/PreferenceRepository');
-const SupplierPreferenceRepository = require('../repositories/SupplierPreferenceRepository');
 
 class PicklistService {
     constructor(userId = null) {
         this.matchingService = new MatchingService(userId);
         this.userFirstMatchingService = new UserFirstMatchingService(userId);
-        this.preferenceRepository = new PreferenceRepository(userId);
-        this.supplierPreferenceRepository = new SupplierPreferenceRepository(userId);
         this.userId = userId;
     }
 
@@ -20,8 +16,6 @@ class PicklistService {
         this.userId = userId;
         this.matchingService.setUserContext && this.matchingService.setUserContext(userId);
         this.userFirstMatchingService.setUserContext(userId);
-        this.preferenceRepository.setUserContext && this.preferenceRepository.setUserContext(userId);
-        this.supplierPreferenceRepository.setUserContext(userId);
     }
 
     /**
@@ -70,43 +64,7 @@ class PicklistService {
         return picklist;
     }
 
-    /**
-     * Store user preferences from picklist selections (legacy method)
-     * @param {Array} preferences - Array of {originalItem, matchedProductId}
-     * @returns {Promise<Array>} Stored preferences
-     */
-    async storePreferences(preferences) {
-        if (!preferences || !Array.isArray(preferences) || preferences.length === 0) {
-            throw new Error('Preferences array is required');
-        }
 
-        // Initialize preferences table if needed
-        await this.preferenceRepository.initializeTable();
-
-        // Store preferences in batch
-        const storedPreferences = await this.preferenceRepository.batchUpsert(preferences);
-
-        return storedPreferences;
-    }
-
-    /**
-     * Store supplier preferences from user selections
-     * @param {Array} supplierPreferences - Array of {originalItem, supplierId, matchedProductId}
-     * @returns {Promise<Array>} Stored supplier preferences
-     */
-    async storeSupplierPreferences(supplierPreferences) {
-        if (!supplierPreferences || !Array.isArray(supplierPreferences) || supplierPreferences.length === 0) {
-            throw new Error('Supplier preferences array is required');
-        }
-
-        console.log(`📝 Storing ${supplierPreferences.length} supplier preferences`);
-
-        // Store supplier preferences in batch
-        const storedPreferences = await this.supplierPreferenceRepository.batchUpsert(supplierPreferences);
-
-        console.log(`✅ Stored ${storedPreferences.length} supplier preferences`);
-        return storedPreferences;
-    }
 
     /**
      * Update a single supplier selection and learn from user change

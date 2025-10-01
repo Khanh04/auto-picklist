@@ -1,73 +1,39 @@
 const express = require('express');
 const router = express.Router();
 
-const PreferenceRepository = require('../repositories/PreferenceRepository');
-const PicklistService = require('../services/PicklistService');
+const ItemPreferenceRepository = require('../repositories/ItemPreferenceRepository');
 const { enhancedAsyncHandler, createNotFoundError } = require('../middleware/enhancedErrorHandler');
 const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody, validateParams } = require('../middleware/validation');
 
-const preferenceRepository = new PreferenceRepository();
-const picklistService = new PicklistService();
+
+
+
+
 
 /**
- * GET /api/preferences
- * Get all user preferences
+ * POST /api/preferences/unified
+ * Store unified preferences (item -> product_id + supplier_id)
  */
-router.get('/', enhancedAsyncHandler(async (req, res) => {
-    console.log('Fetching preferences for user:', req.user.id);
-    const preferences = await preferenceRepository.getAll(req.user.id);
-
-    sendSuccessResponse(req, res, { preferences }, {
-        count: preferences.length,
-        message: 'Preferences retrieved successfully'
-    });
-}));
-
-/**
- * GET /api/preferences/:originalItem
- * Get preference for a specific original item
- */
-router.get('/:originalItem', enhancedAsyncHandler(async (req, res) => {
-    const { originalItem } = req.params;
-    
-    const preference = await preferenceRepository.getByOriginalItem(originalItem);
-    
-    if (preference) {
-        sendSuccessResponse(req, res, {
-            preference: {
-                productId: preference.matched_product_id,
-                description: preference.description,
-                frequency: preference.frequency
-            }
-        });
-    } else {
-        sendSuccessResponse(req, res, { preference: null }, {
-            message: 'No preference found'
-        });
-    }
-}));
-
-/**
- * POST /api/preferences
- * Store user matching preferences
- */
-router.post('/',
+router.post('/unified',
     validateBody({
-        preferences: { 
-            required: true, 
+        preferences: {
+            required: true,
             type: 'array',
             custom: (value) => {
                 if (!Array.isArray(value) || value.length === 0) {
                     return 'must be a non-empty array';
                 }
-                
+
                 for (const pref of value) {
                     if (!pref.originalItem || typeof pref.originalItem !== 'string') {
                         return 'each preference must have a valid originalItem';
                     }
-                    if (!pref.matchedProductId || !Number.isInteger(pref.matchedProductId)) {
-                        return 'each preference must have a valid matchedProductId';
+                    if (!pref.productId || !Number.isInteger(pref.productId)) {
+                        return 'each preference must have a valid productId';
+                    }
+                    if (!pref.supplierId || !Number.isInteger(pref.supplierId)) {
+                        return 'each preference must have a valid supplierId';
                     }
                 }
                 return null;
@@ -76,74 +42,95 @@ router.post('/',
     }),
     enhancedAsyncHandler(async (req, res) => {
         const { preferences } = req.body;
-        
-        const storedPreferences = await picklistService.storePreferences(preferences);
-        
+
+        // Initialize repository with user context
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
+
+        console.log(`Storing ${preferences.length} unified preferences for user:`, req.user.id);
+
+        // Store unified preferences
+        const storedPreferences = await itemPreferenceRepository.batchUpsert(preferences);
+
         sendSuccessResponse(req, res, { preferences: storedPreferences }, {
-            message: `Stored ${storedPreferences.length} matching preferences`
+            message: `Stored ${storedPreferences.length} unified preferences (item → product_id + supplier_id)`
         });
     })
 );
 
 /**
- * DELETE /api/preferences/:preferenceId
- * Delete a specific preference
+ * GET /api/preferences/unified/:originalItem
+ * Get unified preference for a specific original item
  */
-router.delete('/:preferenceId',
-    validateParams({ preferenceId: { type: 'id' } }),
-    enhancedAsyncHandler(async (req, res) => {
-        const { preferenceId } = req.params;
-        
-        const deleted = await preferenceRepository.deleteById(preferenceId);
-        
-        if (!deleted) {
-            throw createNotFoundError('Preference', preferenceId);
-        }
+router.get('/unified/:originalItem', enhancedAsyncHandler(async (req, res) => {
+    const { originalItem } = req.params;
 
-        sendSuccessResponse(req, res, {}, {
-            message: 'Preference deleted successfully'
-        });
-    })
-);
+    // Initialize repository with user context
+    const itemPreferenceRepository = new ItemPreferenceRepository();
+    itemPreferenceRepository.setUserContext(req.user.id);
 
-/**
- * POST /api/preferences/batch-delete
- * Delete multiple preferences
- */
-router.post('/batch-delete',
-    validateBody({
-        preferenceIds: { 
-            required: true, 
-            type: 'array',
-            custom: (value) => {
-                if (!Array.isArray(value) || value.length === 0) {
-                    return 'must be a non-empty array';
-                }
-                
-                for (const id of value) {
-                    if (!Number.isInteger(id) || id <= 0) {
-                        return 'all IDs must be positive integers';
-                    }
-                }
-                return null;
+    const preference = await itemPreferenceRepository.getPreference(originalItem);
+
+    if (preference) {
+        sendSuccessResponse(req, res, {
+            preference: {
+                productId: preference.product_id,
+                supplierId: preference.supplier_id,
+                productDescription: preference.product_description,
+                supplierName: preference.supplier_name,
+                frequency: preference.frequency,
+                lastUsed: preference.last_used
             }
-        }
+        });
+    } else {
+        sendSuccessResponse(req, res, { preference: null }, {
+            message: 'No unified preference found'
+        });
+    }
+}));
+
+/**
+ * GET /api/preferences/unified
+ * Get all unified preferences for the current user
+ */
+router.get('/unified', enhancedAsyncHandler(async (req, res) => {
+    // Initialize repository with user context
+    const itemPreferenceRepository = new ItemPreferenceRepository();
+    itemPreferenceRepository.setUserContext(req.user.id);
+
+    console.log('Fetching unified preferences for user:', req.user.id);
+    const preferences = await itemPreferenceRepository.getAllWithDetails();
+
+    sendSuccessResponse(req, res, { preferences }, {
+        count: preferences.length,
+        message: 'Unified preferences retrieved successfully'
+    });
+}));
+
+/**
+ * DELETE /api/preferences/unified/:id
+ * Delete a unified preference by ID
+ */
+router.delete('/unified/:id',
+    validateParams({
+        id: { required: true, type: 'integer' }
     }),
     enhancedAsyncHandler(async (req, res) => {
-        const { preferenceIds } = req.body;
-        
-        let deletedCount = 0;
-        for (const id of preferenceIds) {
-            const deleted = await preferenceRepository.deleteById(id);
-            if (deleted) deletedCount++;
+        const { id } = req.params;
+
+        // Initialize repository with user context
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
+
+        const deleted = await itemPreferenceRepository.deleteById(parseInt(id));
+
+        if (deleted) {
+            sendSuccessResponse(req, res, { deleted: true }, {
+                message: 'Unified preference deleted successfully'
+            });
+        } else {
+            throw createNotFoundError('RESOURCE_001', 'Unified preference not found');
         }
-        
-        sendSuccessResponse(req, res, { 
-            deletedCount,
-            requestedCount: preferenceIds.length
-        }, {
-            message: `Deleted ${deletedCount} preferences`
-        });
     })
 );
 

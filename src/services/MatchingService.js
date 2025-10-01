@@ -1,10 +1,10 @@
 const ProductRepository = require('../repositories/ProductRepository');
-const PreferenceRepository = require('../repositories/PreferenceRepository');
+const ItemPreferenceRepository = require('../repositories/ItemPreferenceRepository');
 
 class MatchingService {
     constructor(userId = null) {
         this.productRepository = new ProductRepository(userId);
-        this.preferenceRepository = new PreferenceRepository(userId);
+        this.itemPreferenceRepository = new ItemPreferenceRepository(userId);
         this.userId = userId;
     }
 
@@ -15,7 +15,7 @@ class MatchingService {
     setUserContext(userId) {
         this.userId = userId;
         this.productRepository.setUserContext(userId);
-        this.preferenceRepository.setUserContext(userId);
+        this.itemPreferenceRepository.setUserContext(userId);
     }
 
     /**
@@ -274,24 +274,22 @@ class MatchingService {
      */
     async matchWithPreferences(originalItem) {
         try {
-            // Check for user preference first
-            const preference = await this.preferenceRepository.getByOriginalItem(originalItem);
-            
-            if (preference) {
-                // Get the cheapest supplier for this preferred product
-                const suppliers = await this.productRepository.getSuppliersByProductId(preference.matched_product_id);
-                
-                if (suppliers.length > 0) {
-                    const cheapestSupplier = suppliers[0]; // Already sorted by price ASC
-                    return {
-                        supplier: cheapestSupplier.supplier_name,
-                        price: parseFloat(cheapestSupplier.price),
-                        productId: preference.matched_product_id,
-                        description: preference.description,
-                        isPreference: true,
-                        frequency: preference.frequency
-                    };
-                }
+            // Check for unified preference first (includes both product and supplier)
+            const unifiedPreference = await this.itemPreferenceRepository.getPreference(originalItem);
+
+            if (unifiedPreference) {
+                // Unified preference includes both product_id and supplier_id
+                return {
+                    supplier: unifiedPreference.supplier_name,
+                    price: null, // Will be filled in by the system that uses this
+                    productId: unifiedPreference.product_id,
+                    description: unifiedPreference.product_description,
+                    isPreference: true,
+                    frequency: unifiedPreference.frequency,
+                    // Additional unified preference data
+                    supplierId: unifiedPreference.supplier_id,
+                    isUnifiedPreference: true
+                };
             }
 
             // Fallback to automatic matching

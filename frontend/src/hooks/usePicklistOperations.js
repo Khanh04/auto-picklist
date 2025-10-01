@@ -263,81 +263,120 @@ export function usePicklistOperations(
     }
   }
 
-  // Helper function to learn supplier preference (called immediately when user changes supplier)
+  // Helper function to learn unified preference (called immediately when user changes supplier)
   const learnSupplierPreference = async (originalItem, supplierId, matchedProductId = null) => {
     try {
-      devLog(`Learning supplier preference: "${originalItem}" → supplier ${supplierId}`)
+      if (!matchedProductId) {
+        console.warn('Cannot learn preference without product ID - unified system requires both product and supplier')
+        return
+      }
+
+      devLog(`Learning unified preference: "${originalItem}" → product ${matchedProductId}, supplier ${supplierId}`)
       await apiClient.updateSupplierSelection(originalItem, supplierId, matchedProductId)
-      devLog(`Supplier preference learned successfully`)
+      devLog(`Unified preference learned successfully`)
     } catch (error) {
-      console.warn('Failed to learn supplier preference:', error)
+      console.warn('Failed to learn unified preference:', error)
       // Don't block UI operation if preference learning fails
     }
   }
 
-  // Helper function to store preferences (manual overrides)
-  const storePreferences = async () => {
-    // Capture manual overrides for machine learning (product matching only)
-    const preferences = currentPicklist
-      .filter(item => item.manualOverride && item.matchedItemId)
-      .map(item => ({
-        originalItem: item.originalItem,
-        matchedProductId: item.matchedItemId
-      }))
+  // Helper function to ensure supplier data is loaded for items that need preference storage
+  const ensureSupplierDataLoaded = async () => {
+    const itemsNeedingSupplierData = currentPicklist.filter(item =>
+      item.manualOverride &&
+      item.matchedItemId &&
+      item.selectedSupplier &&
+      item.selectedSupplier !== 'back order' &&
+      !productSuppliers[item.matchedItemId]
+    )
 
-    // Store product preferences if any manual overrides were made
-    if (preferences.length > 0) {
-      try {
-        const response = await fetch('/api/preferences', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ preferences })
-        })
+    // Fetch supplier data for items that need it
+    const fetchPromises = itemsNeedingSupplierData.map(item =>
+      fetchProductSuppliers(item.matchedItemId)
+    )
 
-        if (!response.ok) {
-          console.error('Failed to store product preferences - server error:', response.status)
-        } else {
-          devLog(`Stored ${preferences.length} product matching preferences`)
-        }
-      } catch (prefError) {
-        console.warn('Failed to store product preferences - network error:', prefError)
-        // Don't block operation if preference storage fails
-      }
+    if (fetchPromises.length > 0) {
+      devLog(`Fetching supplier data for ${fetchPromises.length} items to enable preference storage`)
+      await Promise.all(fetchPromises)
     }
+  }
 
-    // Also collect and store any remaining supplier preferences
-    // (for cases where user changed suppliers but we missed the immediate learning)
-    const supplierPreferences = currentPicklist
+  // Helper function to store unified preferences (only manual overrides)
+  const storePreferences = async () => {
+    // Ensure supplier data is loaded first for items that have manual overrides
+    await ensureSupplierDataLoaded()
+
+    // Only capture manual overrides made in this session
+    // We need both product_id AND supplier_id for the unified system
+    const unifiedPreferences = currentPicklist
       .filter(item =>
         item.manualOverride &&
-        item.selectedSupplier !== 'back order' &&
-        item.supplierDecision &&
-        // Only store if this was originally a system decision (not already a user preference)
-        !item.supplierDecision.isUserPreferred
+        item.matchedItemId &&
+        item.selectedSupplier !== 'back order'
       )
       .map(item => {
         // Find the supplier ID for the selected supplier
         const suppliers = productSuppliers[item.matchedItemId] || []
-        const selectedSupplier = suppliers.find(s => s.name === item.selectedSupplier)
+        let selectedSupplier = suppliers.find(s => s.name === item.selectedSupplier)
 
-        return {
-          originalItem: item.originalItem,
-          supplierId: selectedSupplier?.id,
-          matchedProductId: item.matchedItemId
+        // If we can't find the supplier in productSuppliers, it might be because
+        // the data hasn't been loaded yet (e.g., when restoring from draft)
+        if (!selectedSupplier && item.selectedSupplier && item.selectedSupplier !== 'back order') {
+          // Try to find by supplier_name field as well (different API formats)
+          selectedSupplier = suppliers.find(s => s.supplier_name === item.selectedSupplier)
         }
-      })
-      .filter(pref => pref.supplierId) // Only include valid supplier IDs
 
-    if (supplierPreferences.length > 0) {
+        if (selectedSupplier) {
+          return {
+            originalItem: item.originalItem,
+            productId: item.matchedItemId,
+            supplierId: selectedSupplier.id || selectedSupplier.supplier_id
+          }
+        }
+
+        // If we still can't find the supplier, log it for debugging but don't fail
+        if (item.selectedSupplier && item.selectedSupplier !== 'back order') {
+          console.warn(`Could not find supplier ID for "${item.selectedSupplier}" in product ${item.matchedItemId}`)
+        }
+        return null
+      })
+      .filter(pref => pref && pref.supplierId) // Only include valid unified preferences
+
+    // Store unified preferences if any manual overrides were made
+    if (unifiedPreferences.length > 0) {
       try {
-        await apiClient.storeSupplierPreferences(supplierPreferences)
-        devLog(`Stored ${supplierPreferences.length} supplier preferences`)
-      } catch (error) {
-        console.warn('Failed to store supplier preferences:', error)
+        devLog(`Storing ${unifiedPreferences.length} unified preferences (item → product_id + supplier_id)`)
+
+        // Use new unified preference API
+        const response = await fetch('/api/preferences/unified', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ preferences: unifiedPreferences })
+        })
+
+        if (!response.ok) {
+          console.error('Failed to store unified preferences - server error:', response.status)
+        } else {
+          devLog(`Successfully stored ${unifiedPreferences.length} unified preferences`)
+        }
+      } catch (prefError) {
+        console.warn('Failed to store unified preferences - network error:', prefError)
         // Don't block operation if preference storage fails
       }
+    }
+
+    // Note: In the unified system, we need both product_id AND supplier_id
+    // Items with 'back order' (no supplier selected) cannot be stored as preferences
+    const skippedItems = currentPicklist.filter(item =>
+      item.manualOverride &&
+      item.matchedItemId &&
+      item.selectedSupplier === 'back order'
+    ).length
+
+    if (skippedItems > 0) {
+      devLog(`Skipped ${skippedItems} items with 'back order' - unified system requires both product and supplier selection`)
     }
   }
 

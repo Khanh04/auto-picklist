@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const PicklistService = require('../services/PicklistService');
-const SupplierPreferenceRepository = require('../repositories/SupplierPreferenceRepository');
+const ItemPreferenceRepository = require('../repositories/ItemPreferenceRepository');
 const { enhancedAsyncHandler, createValidationError } = require('../middleware/enhancedErrorHandler');
 const { sendSuccessResponse } = require('../utils/errorResponse');
 const { validateBody } = require('../middleware/validation');
@@ -79,74 +79,41 @@ router.post('/update-selection',
     })
 );
 
-/**
- * POST /api/supplier-preferences/store-batch
- * Store multiple supplier preferences from shopping list
- */
-router.post('/store-batch',
-    validateBody({
-        preferences: { required: true, type: 'array' }
-    }),
-    enhancedAsyncHandler(async (req, res) => {
-        const { preferences } = req.body;
-
-        if (!Array.isArray(preferences) || preferences.length === 0) {
-            throw createValidationError(['preferences'], 'Preferences array is required and cannot be empty');
-        }
-
-        // Validate preferences structure
-        for (let i = 0; i < preferences.length; i++) {
-            const pref = preferences[i];
-            if (!pref.originalItem || !pref.supplierId) {
-                throw createValidationError(['preferences'], `Preference at index ${i} must have 'originalItem' and 'supplierId' properties`);
-            }
-        }
-
-        // Create user-context service instance
-        const picklistService = new PicklistService(req.user.id);
-
-        const storedPreferences = await picklistService.storeSupplierPreferences(preferences);
-
-        sendSuccessResponse(req, res, {
-            storedPreferences,
-            count: storedPreferences.length
-        }, {
-            message: `Successfully stored ${storedPreferences.length} supplier preferences`
-        });
-    })
-);
 
 /**
  * GET /api/supplier-preferences/:originalItem
- * Get supplier preference for a specific item
+ * Get unified preference for a specific item (migrated to unified system)
  */
 router.get('/:originalItem',
     enhancedAsyncHandler(async (req, res) => {
         const { originalItem } = req.params;
-        const { matchedProductId } = req.query;
 
-        // Create user-context repository instance
-        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+        // Create user-context repository instance for unified preferences
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
 
-        const preference = await supplierPreferenceRepository.getPreference(
-            originalItem,
-            matchedProductId ? parseInt(matchedProductId) : null
-        );
+        const preference = await itemPreferenceRepository.getPreference(originalItem);
 
         if (!preference) {
             sendSuccessResponse(req, res, { preference: null }, {
-                message: `No supplier preference found for "${originalItem}"`
+                message: `No unified preference found for "${originalItem}"`
             });
         } else {
-            const preferenceStrength = supplierPreferenceRepository.calculatePreferenceStrength(preference);
+            const preferenceStrength = itemPreferenceRepository.calculatePreferenceStrength(preference);
 
             sendSuccessResponse(req, res, {
                 preference: {
-                    ...preference,
+                    original_item: preference.original_item,
+                    product_id: preference.product_id,
+                    supplier_id: preference.supplier_id,
+                    supplier_name: preference.supplier_name,
+                    product_description: preference.product_description,
+                    frequency: preference.frequency,
+                    last_used: preference.last_used,
                     preferenceStrength
                 }
             }, {
-                message: `Supplier preference found: "${originalItem}" → "${preference.supplier_name}" (${preference.frequency} times)`
+                message: `Unified preference found: "${originalItem}" → "${preference.supplier_name}" (${preference.frequency} times)`
             });
         }
     })
@@ -181,19 +148,20 @@ router.post('/summary/items',
 
 /**
  * GET /api/supplier-preferences/all
- * Get all supplier preferences with details
+ * Get all unified preferences with details (migrated to unified system)
  */
 router.get('/all',
     enhancedAsyncHandler(async (req, res) => {
-        // Create user-context repository instance
-        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+        // Create user-context repository instance for unified preferences
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
 
-        const allPreferences = await supplierPreferenceRepository.getAllWithDetails();
+        const allPreferences = await itemPreferenceRepository.getAllWithDetails();
 
         // Add preference strength to each preference
         const enhancedPreferences = allPreferences.map(preference => ({
             ...preference,
-            preferenceStrength: supplierPreferenceRepository.calculatePreferenceStrength(preference)
+            preferenceStrength: itemPreferenceRepository.calculatePreferenceStrength(preference)
         }));
 
         sendSuccessResponse(req, res, {
@@ -205,19 +173,21 @@ router.get('/all',
 
 /**
  * GET /api/supplier-preferences/stats
- * Get preference statistics for reporting
+ * Get unified preference statistics for reporting (migrated to unified system)
  */
 router.get('/stats',
     enhancedAsyncHandler(async (req, res) => {
-        // Create user-context repository instance
-        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+        // Create user-context repository instance for unified preferences
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
 
-        const stats = await supplierPreferenceRepository.getPreferenceStats();
+        const stats = await itemPreferenceRepository.getPreferenceStats();
 
         sendSuccessResponse(req, res, {
             statistics: {
                 totalPreferences: parseInt(stats.total_preferences),
                 uniqueItems: parseInt(stats.unique_items),
+                uniqueProducts: parseInt(stats.unique_products),
                 uniqueSuppliers: parseInt(stats.unique_suppliers),
                 averageFrequency: parseFloat(stats.avg_frequency).toFixed(2),
                 maxFrequency: parseInt(stats.max_frequency),
@@ -229,7 +199,7 @@ router.get('/stats',
 
 /**
  * DELETE /api/supplier-preferences/:preferenceId
- * Delete a specific supplier preference
+ * Delete a specific unified preference (migrated to unified system)
  */
 router.delete('/:preferenceId',
     enhancedAsyncHandler(async (req, res) => {
@@ -239,18 +209,19 @@ router.delete('/:preferenceId',
             throw createValidationError(['preferenceId'], 'Valid preference ID is required');
         }
 
-        // Create user-context repository instance
-        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+        // Create user-context repository instance for unified preferences
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
 
-        const deleted = await supplierPreferenceRepository.deleteById(parseInt(preferenceId));
+        const deleted = await itemPreferenceRepository.deleteById(parseInt(preferenceId));
 
         if (!deleted) {
             sendSuccessResponse(req, res, { deleted: false }, {
-                message: `Preference with ID ${preferenceId} not found`
+                message: `Unified preference with ID ${preferenceId} not found`
             });
         } else {
             sendSuccessResponse(req, res, { deleted: true }, {
-                message: `Preference with ID ${preferenceId} deleted successfully`
+                message: `Unified preference with ID ${preferenceId} deleted successfully`
             });
         }
     })
@@ -258,7 +229,7 @@ router.delete('/:preferenceId',
 
 /**
  * POST /api/supplier-preferences/cleanup
- * Clean up old preferences that haven't been used recently
+ * Clean up old unified preferences that haven't been used recently (migrated to unified system)
  */
 router.post('/cleanup',
     validateBody({
@@ -271,16 +242,17 @@ router.post('/cleanup',
             throw createValidationError(['daysOld'], 'Cleanup period must be at least 30 days');
         }
 
-        // Create user-context repository instance
-        const supplierPreferenceRepository = new SupplierPreferenceRepository(req.user.id);
+        // Create user-context repository instance for unified preferences
+        const itemPreferenceRepository = new ItemPreferenceRepository();
+        itemPreferenceRepository.setUserContext(req.user.id);
 
-        const cleanedCount = await supplierPreferenceRepository.cleanupOldPreferences(daysOld);
+        const cleanedCount = await itemPreferenceRepository.cleanupOldPreferences(daysOld);
 
         sendSuccessResponse(req, res, {
             cleanedCount,
             daysOld
         }, {
-            message: `Cleaned up ${cleanedCount} old preferences (older than ${daysOld} days)`
+            message: `Cleaned up ${cleanedCount} old unified preferences (older than ${daysOld} days)`
         });
     })
 );

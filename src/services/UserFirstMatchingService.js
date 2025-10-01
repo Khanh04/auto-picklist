@@ -1,5 +1,5 @@
 const MatchingService = require('./MatchingService');
-const SupplierPreferenceRepository = require('../repositories/SupplierPreferenceRepository');
+const ItemPreferenceRepository = require('../repositories/ItemPreferenceRepository');
 const ProductRepository = require('../repositories/ProductRepository');
 const SupplierRepository = require('../repositories/SupplierRepository');
 
@@ -10,7 +10,7 @@ const SupplierRepository = require('../repositories/SupplierRepository');
 class UserFirstMatchingService extends MatchingService {
     constructor(userId = null) {
         super(userId);
-        this.supplierPreferenceRepository = new SupplierPreferenceRepository(userId);
+        this.itemPreferenceRepository = new ItemPreferenceRepository(userId);
         this.productRepository = new ProductRepository(userId);
         this.supplierRepository = new SupplierRepository(userId);
         this.userId = userId;
@@ -23,7 +23,7 @@ class UserFirstMatchingService extends MatchingService {
     setUserContext(userId) {
         this.userId = userId;
         super.setUserContext(userId);
-        this.supplierPreferenceRepository.setUserContext(userId);
+        this.itemPreferenceRepository.setUserContext(userId);
         this.productRepository.setUserContext(userId);
         this.supplierRepository.setUserContext(userId);
     }
@@ -54,14 +54,43 @@ class UserFirstMatchingService extends MatchingService {
         const { item: originalItem, quantity } = orderItem;
 
         try {
-            // Step 1: Find product match
-            const productMatch = await this.matchWithPreferences(originalItem);
+            // Step 1: Check for unified preference first (single lookup)
+            const unifiedPreference = await this.itemPreferenceRepository.getPreference(originalItem);
 
-            // Step 2: Select supplier using user-first logic
-            const supplierDecision = await this.selectSupplierUserFirst(
-                originalItem,
-                productMatch.productId
-            );
+            let productMatch, supplierDecision;
+
+            if (unifiedPreference) {
+                // We have a complete preference: item -> {product_id, supplier_id}
+                console.log(`🎯 Found unified preference for "${originalItem}": product ${unifiedPreference.product_id}, supplier ${unifiedPreference.supplier_name}`);
+
+                productMatch = {
+                    productId: unifiedPreference.product_id,
+                    description: unifiedPreference.product_description,
+                    isPreference: true
+                };
+
+                // Get price information for this specific product-supplier combination
+                const priceInfo = await this.getSupplierDetails(unifiedPreference.supplier_id, unifiedPreference.product_id);
+
+                supplierDecision = {
+                    supplier: {
+                        id: unifiedPreference.supplier_id,
+                        name: unifiedPreference.supplier_name
+                    },
+                    price: priceInfo?.price || null,
+                    reason: `User preference (used ${unifiedPreference.frequency} times)`,
+                    isUserPreferred: true,
+                    alternatives: await this.getAlternativeSuppliers(unifiedPreference.product_id, unifiedPreference.supplier_id),
+                    preferenceStrength: this.itemPreferenceRepository.calculatePreferenceStrength(unifiedPreference)
+                };
+
+            } else {
+                // No unified preference - fall back to traditional matching + supplier selection
+                console.log(`🔍 No unified preference for "${originalItem}", using traditional matching`);
+
+                productMatch = await this.matchWithPreferences(originalItem);
+                supplierDecision = await this.selectSupplierUserFirst(originalItem, productMatch.productId);
+            }
 
             // Step 3: Build complete picklist item
             return {
@@ -115,46 +144,16 @@ class UserFirstMatchingService extends MatchingService {
 
     /**
      * User-first supplier selection logic
-     * Always prioritizes user preferences over system optimization
+     * Simplified - only used as fallback when no unified preference exists
      * @param {string} originalItem - Original item name
      * @param {number} productId - Matched product ID
      * @returns {Promise<Object>} Supplier decision with reasoning
      */
     async selectSupplierUserFirst(originalItem, productId) {
-        // Step 1: ALWAYS check for user preference first
-        const userPreference = await this.supplierPreferenceRepository.getPreference(
-            originalItem,
-            productId
-        );
+        // This method is now only used as fallback when no unified preference exists
+        // The unified preference system handles both product matching AND supplier selection
 
-        if (userPreference) {
-            console.log(`👤 User preference found for "${originalItem}": ${userPreference.supplier_name} (${userPreference.frequency}x)`);
-
-            // Get supplier details and pricing
-            const preferredSupplierDetails = await this.getSupplierDetails(
-                userPreference.preferred_supplier_id,
-                productId
-            );
-
-            if (preferredSupplierDetails) {
-                return {
-                    supplier: {
-                        id: userPreference.preferred_supplier_id,
-                        name: userPreference.supplier_name
-                    },
-                    price: preferredSupplierDetails.price,
-                    reason: `User preference (selected ${userPreference.frequency} times)`,
-                    isUserPreferred: true,
-                    alternatives: await this.getAlternativeSuppliers(productId, userPreference.preferred_supplier_id),
-                    preferenceStrength: this.supplierPreferenceRepository.calculatePreferenceStrength(userPreference)
-                };
-            } else {
-                console.warn(`⚠️  User preferred supplier "${userPreference.supplier_name}" not available for "${originalItem}", falling back to system optimization`);
-            }
-        }
-
-        // Step 2: No user preference - use system optimization for the specific matched product
-        console.log(`🤖 No user preference for "${originalItem}", using system optimization for product ${productId}`);
+        console.log(`🤖 No unified preference for "${originalItem}", using system optimization for product ${productId}`);
 
         if (productId) {
             // Get all suppliers for the specific matched product
@@ -178,7 +177,7 @@ class UserFirstMatchingService extends MatchingService {
             }
         }
 
-        // Step 3: Fallback to "back order"
+        // Fallback to "back order"
         console.log(`⚠️  No suppliers available for "${originalItem}"`);
         return {
             supplier: { id: null, name: 'back order' },
@@ -263,31 +262,37 @@ class UserFirstMatchingService extends MatchingService {
      * Update supplier selection and learn from user changes
      * @param {string} originalItem - Original item name
      * @param {number} newSupplierId - New supplier ID
-     * @param {number} matchedProductId - Optional matched product ID
+     * @param {number} matchedProductId - Required matched product ID
      * @returns {Promise<Object>} Updated details
      */
-    async updateSupplierSelection(originalItem, newSupplierId, matchedProductId = null) {
+    async updateSupplierSelection(originalItem, newSupplierId, matchedProductId) {
         try {
-            // Store the user's new preference
-            const savedPreference = await this.supplierPreferenceRepository.upsert(
+            if (!matchedProductId) {
+                throw new Error('Product ID is required for unified preference system');
+            }
+
+            // Store the unified preference (item -> product_id + supplier_id)
+            const savedPreference = await this.itemPreferenceRepository.upsert(
                 originalItem,
-                newSupplierId,
-                matchedProductId
+                matchedProductId,
+                newSupplierId
             );
 
             // Get updated supplier details
             const supplierDetails = await this.getSupplierDetails(newSupplierId, matchedProductId);
             const supplier = await this.supplierRepository.getById(newSupplierId);
 
-            console.log(`📝 Learned preference: "${originalItem}" → "${supplier?.name}" (frequency: ${savedPreference.frequency})`);
+            console.log(`📝 Learned unified preference: "${originalItem}" → product ${matchedProductId}, supplier "${supplier?.name}" (frequency: ${savedPreference.frequency})`);
 
             return {
                 originalItem,
                 newSupplier: supplier?.name || 'Unknown Supplier',
                 newPrice: supplierDetails?.price || 'Not available',
-                reason: 'User manual selection - preference learned',
+                reason: 'User manual selection - unified preference learned',
                 preferenceUpdated: true,
-                frequency: savedPreference.frequency
+                frequency: savedPreference.frequency,
+                productId: matchedProductId,
+                supplierId: newSupplierId
             };
 
         } catch (error) {
@@ -308,15 +313,21 @@ class UserFirstMatchingService extends MatchingService {
             preferenceDetails: []
         };
 
+        // Use the new unified item preferences
+        const preferences = await this.itemPreferenceRepository.getPreferencesForItems(items);
+
         for (const item of items) {
-            const preference = await this.supplierPreferenceRepository.getPreference(item);
+            const preference = preferences.get(item.toLowerCase());
             if (preference) {
                 summary.itemsWithPreferences++;
                 summary.preferenceDetails.push({
                     item,
+                    product: preference.product_description,
                     supplier: preference.supplier_name,
                     frequency: preference.frequency,
-                    lastUsed: preference.last_used
+                    lastUsed: preference.last_used,
+                    productId: preference.product_id,
+                    supplierId: preference.supplier_id
                 });
             }
         }

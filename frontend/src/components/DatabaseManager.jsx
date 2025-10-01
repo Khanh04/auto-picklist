@@ -44,7 +44,7 @@ const DatabaseManager = ({ onBack }) => {
 
     const fetchPreferences = async () => {
         try {
-            const response = await fetch('/api/preferences');
+            const response = await fetch('/api/preferences/unified');
             if (response.ok) {
                 const data = await response.json();
                 setPreferences(data.data?.preferences || data.preferences || []);
@@ -64,17 +64,17 @@ const DatabaseManager = ({ onBack }) => {
         setSuccess('');
 
         try {
-            const response = await fetch(`/api/preferences/${id}`, {
+            const response = await fetch(`/api/preferences/unified/${id}`, {
                 method: 'DELETE'
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                setSuccess(data.message);
+                setSuccess(data.meta?.message || 'Preference deleted successfully');
                 fetchPreferences(); // Refresh preferences list
             } else {
-                setError(data.error || 'Failed to delete preference');
+                setError(data.error?.message || 'Failed to delete preference');
             }
         } catch (err) {
             setError('Network error: ' + err.message);
@@ -1037,7 +1037,8 @@ const DatabaseManager = ({ onBack }) => {
                                         <thead>
                                             <tr className="bg-gray-50">
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Original Item</th>
-                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Matched To</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Matched Product</th>
+                                                <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Preferred Supplier</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Used</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Last Used</th>
                                                 <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700">Actions</th>
@@ -1053,7 +1054,12 @@ const DatabaseManager = ({ onBack }) => {
                                                     </td>
                                                     <td className="border border-gray-200 p-3">
                                                         <div className="text-gray-900 max-w-xs">
-                                                            {pref.matched_description}
+                                                            {pref.product_description || 'No description'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-gray-200 p-3">
+                                                        <div className="text-gray-900 max-w-xs">
+                                                            {pref.supplier_name || 'Unknown supplier'}
                                                         </div>
                                                     </td>
                                                     <td className="border border-gray-200 p-3 text-center">

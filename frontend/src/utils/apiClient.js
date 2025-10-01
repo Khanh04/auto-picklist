@@ -187,10 +187,10 @@ class ApiClient {
   }
 
   /**
-   * Get preferences
+   * Get unified preferences
    */
   async getPreferences() {
-    return this.get('/api/preferences');
+    return this.get('/api/preferences/unified');
   }
 
   /**
@@ -292,12 +292,6 @@ class ApiClient {
     });
   }
 
-  /**
-   * Store multiple supplier preferences from shopping list
-   */
-  async storeSupplierPreferences(preferences) {
-    return this.post('/api/supplier-preferences/store-batch', { preferences });
-  }
 
   /**
    * Get supplier preference for a specific item

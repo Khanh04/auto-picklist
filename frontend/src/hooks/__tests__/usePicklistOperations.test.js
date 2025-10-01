@@ -273,20 +273,37 @@ describe('usePicklistOperations', () => {
     expect(result.current.isExporting).toBe(false)
   })
 
-  it('should store preferences correctly', async () => {
+  it('should store unified preferences correctly', async () => {
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true })
     })
 
-    const picklistWithPreferences = [
-      { ...mockPicklist[0], manualOverride: true, matchedItemId: 1 },
-      { ...mockPicklist[1], manualOverride: true, matchedItemId: 2 }
+    // Mock productSuppliers for the unified preference system
+    const mockProductSuppliers = {
+      1: [{ id: 1, name: 'Supplier A', price: 10.00 }],
+      2: [{ id: 2, name: 'Supplier B', price: 15.00 }]
+    }
+
+    const picklistWithUnifiedPreferences = [
+      {
+        ...mockPicklist[0],
+        manualOverride: true,
+        matchedItemId: 1,
+        selectedSupplier: 'Supplier A'
+      },
+      {
+        ...mockPicklist[1],
+        manualOverride: true,
+        matchedItemId: 2,
+        selectedSupplier: 'Supplier B'
+      }
     ]
 
     const propsWithPreferences = {
       ...defaultProps,
-      currentPicklist: picklistWithPreferences
+      currentPicklist: picklistWithUnifiedPreferences,
+      productSuppliers: mockProductSuppliers
     }
 
     const { result } = renderHook(() => usePicklistOperations(...Object.values(propsWithPreferences)))
@@ -295,7 +312,8 @@ describe('usePicklistOperations', () => {
       await result.current.storePreferences()
     })
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/preferences', {
+    // Should call unified preferences endpoint
+    expect(global.fetch).toHaveBeenCalledWith('/api/preferences/unified', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -303,12 +321,14 @@ describe('usePicklistOperations', () => {
       body: JSON.stringify({
         preferences: [
           {
-            originalItem: picklistWithPreferences[0].originalItem,
-            matchedProductId: 1
+            originalItem: picklistWithUnifiedPreferences[0].originalItem,
+            productId: 1,
+            supplierId: 1
           },
           {
-            originalItem: picklistWithPreferences[1].originalItem,
-            matchedProductId: 2
+            originalItem: picklistWithUnifiedPreferences[1].originalItem,
+            productId: 2,
+            supplierId: 2
           }
         ]
       })

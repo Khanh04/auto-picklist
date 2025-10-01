@@ -67,8 +67,8 @@ export const handlers = [
     })
   }),
 
-  // Store preferences
-  http.post('/api/preferences', async ({ request }) => {
+  // Store unified preferences
+  http.post('/api/preferences/unified', async ({ request }) => {
     const body = await request.json()
     return HttpResponse.json({
       success: true,
