@@ -23,8 +23,13 @@ function PicklistTableRow({
                               e.target.tagName === 'SELECT' ||
                               e.target.tagName === 'TEXTAREA' ||
                               e.target.tagName === 'BUTTON' ||
+                              e.target.tagName === 'LI' || // Autocomplete options
                               e.target.closest('[contenteditable]') ||
-                              e.target.closest('.MuiAutocomplete-root')
+                              e.target.closest('.MuiAutocomplete-root') ||
+                              e.target.closest('.MuiAutocomplete-popper') ||
+                              e.target.closest('[role="presentation"]') ||
+                              e.target.closest('[role="listbox"]') ||
+                              e.target.closest('[role="option"]')
 
     if (!isEditableElement) {
       // Toggle selection: if already selected, deselect; if not, select
