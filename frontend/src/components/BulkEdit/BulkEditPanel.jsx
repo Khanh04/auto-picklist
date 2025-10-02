@@ -1,6 +1,6 @@
-import React from 'react'
 import BulkItemSelector from './BulkItemSelector'
 import BulkSupplierSelector from './BulkSupplierSelector'
+import SelectionPreview from './SelectionPreview'
 
 function BulkEditPanel({
   selectedRows,
@@ -12,6 +12,7 @@ function BulkEditPanel({
   fuseInstance,
   currentPicklist,
   onClearSelection,
+  onRemoveFromSelection,
   onBulkMatch,
   onBulkSupplierChange,
   getCommonSuppliersForSelection
@@ -30,7 +31,23 @@ function BulkEditPanel({
             Clear selection
           </button>
         </div>
+        <div className="flex items-center gap-2 text-xs text-blue-700">
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <span>
+            <kbd className="px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-xs font-mono">Shift</kbd> for range •
+            <kbd className="px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-xs font-mono ml-1">Ctrl</kbd> to add
+          </span>
+        </div>
       </div>
+
+      {/* Selection Preview */}
+      <SelectionPreview
+        selectedRows={selectedRows}
+        currentPicklist={currentPicklist}
+        onRemoveItem={(index) => onRemoveFromSelection && onRemoveFromSelection(index, false)}
+      />
 
       {/* Mode Selection Tabs */}
       <div className="flex mb-4 border-b border-blue-200">
@@ -64,6 +81,7 @@ function BulkEditPanel({
           selectOptions={selectOptions}
           fuseInstance={fuseInstance}
           onBulkMatch={onBulkMatch}
+          selectedRows={selectedRows}
         />
       )}
 

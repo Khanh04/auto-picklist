@@ -205,6 +205,7 @@ function PicklistPreview({ results, onBack, onNavigate }) {
               fuseInstance={fuseInstance}
               currentPicklist={currentPicklist}
               onClearSelection={handleClearSelection}
+              onRemoveFromSelection={handleRowSelection}
               onBulkMatch={(selectedOption) => handleBulkMatch(selectedOption, selectedRows, handleClearSelection)}
               onBulkSupplierChange={(selectedSupplier) => handleBulkSupplierChange(selectedSupplier, selectedRows, handleClearSelection)}
               getCommonSuppliersForSelection={getCommonSuppliersForSelection}
