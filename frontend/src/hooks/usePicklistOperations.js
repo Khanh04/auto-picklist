@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { devLog } from '../utils/logger'
-import apiClient from '../utils/apiClient'
 
 export function usePicklistOperations(
   currentPicklist,
@@ -108,12 +107,6 @@ export function usePicklistOperations(
         if (selectedSupplier) {
           changes.unitPrice = selectedSupplier.price
           changes.totalPrice = (selectedSupplier.price * currentItem.quantity).toFixed(2)
-
-          // Learn supplier preference if this is a user manual change
-          // Only learn if the new selection is different from the system's original selection
-          if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
-            learnSupplierPreference(currentItem.originalItem, selectedSupplier.id, currentItem.matchedItemId)
-          }
         }
       } else if (!currentItem.manualOverride) {
         // Reset price if no specific supplier data available and not manually overridden
@@ -202,11 +195,6 @@ export function usePicklistOperations(
       }
 
       updates.push({ index, changes })
-
-      // Learn supplier preference for each item if this is a change from system selection
-      if (currentItem.supplierDecision && !currentItem.supplierDecision.isUserPreferred) {
-        learnSupplierPreference(currentItem.originalItem, selectedSupplier.id, currentItem.matchedItemId)
-      }
     }
 
     // Use bulk update from centralized state management
@@ -260,23 +248,6 @@ export function usePicklistOperations(
       supplierPreferences, // Supplier selection preferences
       systemOptimizedItems,
       totalCost
-    }
-  }
-
-  // Helper function to learn unified preference (called immediately when user changes supplier)
-  const learnSupplierPreference = async (originalItem, supplierId, matchedProductId = null) => {
-    try {
-      if (!matchedProductId) {
-        console.warn('Cannot learn preference without product ID - unified system requires both product and supplier')
-        return
-      }
-
-      devLog(`Learning unified preference: "${originalItem}" → product ${matchedProductId}, supplier ${supplierId}`)
-      await apiClient.updateSupplierSelection(originalItem, supplierId, matchedProductId)
-      devLog(`Unified preference learned successfully`)
-    } catch (error) {
-      console.warn('Failed to learn unified preference:', error)
-      // Don't block UI operation if preference learning fails
     }
   }
 

@@ -313,47 +313,6 @@ class ApiClient {
     return this.post('/api/supplier-preferences/intelligent-picklist', { orderItems });
   }
 
-  /**
-   * Update supplier selection and learn user preference
-   */
-  async updateSupplierSelection(originalItem, newSupplierId, matchedProductId = null) {
-    return this.post('/api/supplier-preferences/update-selection', {
-      originalItem,
-      newSupplierId,
-      matchedProductId
-    });
-  }
-
-
-  /**
-   * Get supplier preference for a specific item
-   */
-  async getSupplierPreference(originalItem, matchedProductId = null) {
-    const params = matchedProductId ? `?matchedProductId=${matchedProductId}` : '';
-    return this.get(`/api/supplier-preferences/${encodeURIComponent(originalItem)}${params}`);
-  }
-
-  /**
-   * Get preferences summary for multiple items
-   */
-  async getPreferencesSummary(items) {
-    return this.post('/api/supplier-preferences/summary/items', { items });
-  }
-
-  /**
-   * Get all supplier preferences
-   */
-  async getAllSupplierPreferences() {
-    return this.get('/api/supplier-preferences/all');
-  }
-
-  /**
-   * Get supplier preference statistics
-   */
-  async getSupplierPreferenceStats() {
-    return this.get('/api/supplier-preferences/stats');
-  }
-
   // Authentication API methods
 
   /**
