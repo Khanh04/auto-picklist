@@ -41,6 +41,9 @@ const config = {
     // Security configuration
     security: {
         sessionSecret: process.env.SESSION_SECRET || 'auto-picklist-secret-key',
+        jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        jwtExpiresIn: process.env.JWT_EXPIRES_IN || '4h',
+        refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
         rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW) || 15 * 60 * 1000, // 15 minutes
         rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX) || 100,
         corsOrigin: process.env.CORS_ORIGIN || '*'

@@ -137,9 +137,9 @@ const knexConfig = require('./src/migrations/knexfile.js')[environment];
 const db = knex(knexConfig);
 
 const authMiddleware = createAuthMiddleware(db, {
-    jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-    jwtExpiresIn: '15m',
-    refreshTokenExpiresIn: '7d'
+    jwtSecret: config.security.jwtSecret,
+    jwtExpiresIn: config.security.jwtExpiresIn,
+    refreshTokenExpiresIn: config.security.refreshTokenExpiresIn
 });
 
 // API Routes

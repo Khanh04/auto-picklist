@@ -97,7 +97,7 @@ function createAuthRoutes(db, authMiddleware) {
           ip: req.ip,
           acceptLanguage: req.get('Accept-Language')
         }),
-        ipAddress: req.ip || req.connection.remoteAddress
+        ipAddress: req.ip || req.socket.remoteAddress
       };
 
       const result = await authService.authenticateUser({
@@ -111,7 +111,7 @@ function createAuthRoutes(db, authMiddleware) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 1000 // 60 minutes to match JWT expiry
+        maxAge: 4 * 60 * 60 * 1000 // 4 hours to match JWT expiry
       });
 
       // Also set refresh token as httpOnly cookie
