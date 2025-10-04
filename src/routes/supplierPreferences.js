@@ -52,35 +52,6 @@ router.post('/intelligent-picklist',
 );
 
 /**
- * POST /api/supplier-preferences/update-selection
- * Update supplier selection and learn user preference
- */
-router.post('/update-selection',
-    validateBody({
-        originalItem: { required: true, type: 'string' },
-        newSupplierId: { required: true, type: 'number' },
-        matchedProductId: { type: 'number' }
-    }),
-    enhancedAsyncHandler(async (req, res) => {
-        const { originalItem, newSupplierId, matchedProductId } = req.body;
-
-        // Create user-context service instance
-        const picklistService = new PicklistService(req.user.id);
-
-        const result = await picklistService.updateSupplierSelection(
-            originalItem,
-            newSupplierId,
-            matchedProductId
-        );
-
-        sendSuccessResponse(req, res, result, {
-            message: `Supplier preference learned: "${originalItem}" → "${result.newSupplier}"`
-        });
-    })
-);
-
-
-/**
  * GET /api/supplier-preferences/:originalItem
  * Get unified preference for a specific item (migrated to unified system)
  */

@@ -41,6 +41,7 @@ function ShoppingList({ onBack, shareId, loading = false, onPicklistUpdate = nul
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [quantityModalData, setQuantityModalData] = useState(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Helper function to calculate if an item is checked based on quantities
   const isItemChecked = (item) => {
@@ -890,6 +891,67 @@ function ShoppingList({ onBack, shareId, loading = false, onPicklistUpdate = nul
     }
   };
 
+  const handleExportRemaining = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch(`/api/shopping-list/share/${shareId}/export-remaining`);
+
+      if (!response.ok) {
+        throw new Error('Failed to export remaining items');
+      }
+
+      // Get the CSV content
+      const csvContent = await response.text();
+
+      // Create a blob and download link with proper MIME type
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Get filename - try multiple headers
+      let filename = 'remaining-items.csv';
+
+      // Try X-Suggested-Filename first (custom header)
+      const suggestedFilename = response.headers.get('x-suggested-filename');
+      if (suggestedFilename) {
+        filename = suggestedFilename;
+      } else {
+        // Fallback to Content-Disposition
+        const contentDisposition = response.headers.get('content-disposition');
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, '');
+          }
+        }
+      }
+
+      // Ensure filename ends with .csv
+      if (!filename.endsWith('.csv')) {
+        filename += '.csv';
+      }
+
+      link.download = filename;
+      link.setAttribute('type', 'text/csv');
+      document.body.appendChild(link);
+      link.click();
+
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+
+      devLog(`✅ Exported remaining items to ${filename}`);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export remaining items. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Show loading state while data is being fetched
   if (loading || isLoading) {
     return (
@@ -975,6 +1037,14 @@ function ShoppingList({ onBack, shareId, loading = false, onPicklistUpdate = nul
             </button>
             <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Shopping List</h1>
             <div className="flex items-center gap-2 md:gap-3">
+              <button
+                onClick={handleExportRemaining}
+                className="text-blue-600 hover:text-blue-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                disabled={stats.remaining === 0 || isExporting}
+                title="Export remaining items to CSV"
+              >
+                {isExporting ? '⏳ Exporting...' : '📥 Export Remaining'}
+              </button>
               <button
                 onClick={handleClearAll}
                 className="text-red-600 hover:text-red-800 text-sm md:text-base font-medium disabled:opacity-50 px-2 md:px-3 py-1 rounded-md hover:bg-red-50 transition-colors"

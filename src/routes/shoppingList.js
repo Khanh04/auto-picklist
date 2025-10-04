@@ -340,4 +340,81 @@ router.get('/stats', enhancedAsyncHandler(async (req, res) => {
     });
 }));
 
+/**
+ * GET /api/shopping-list/share/:shareId/export-remaining
+ * Export remaining (unpurchased) items to CSV format for re-upload
+ */
+router.get('/share/:shareId/export-remaining', enhancedAsyncHandler(async (req, res) => {
+    const { shareId } = req.params;
+
+    // Get shopping list data with item states
+    const listResult = await pool.query(`
+        SELECT sl.id, sl.share_id, sl.title, sl.picklist_data, sl.created_at, sl.expires_at
+        FROM shopping_lists sl
+        WHERE sl.share_id = $1 AND sl.expires_at > CURRENT_TIMESTAMP
+    `, [shareId]);
+
+    if (listResult.rows.length === 0) {
+        throw createNotFoundError('Shopping list', shareId);
+    }
+
+    const shoppingList = listResult.rows[0];
+
+    // Get item states
+    const itemsResult = await pool.query(`
+        SELECT item_index, purchased_quantity, requested_quantity
+        FROM shopping_list_items
+        WHERE shopping_list_id = $1
+        ORDER BY item_index
+    `, [shoppingList.id]);
+
+    // Create a map of item states
+    const itemStates = new Map();
+    itemsResult.rows.forEach(row => {
+        itemStates.set(row.item_index, {
+            purchasedQuantity: row.purchased_quantity,
+            requestedQuantity: row.requested_quantity
+        });
+    });
+
+    // Filter and format remaining items for CSV
+    const remainingItems = [];
+    shoppingList.picklist_data.forEach((item, index) => {
+        const state = itemStates.get(index);
+        const purchasedQty = state?.purchasedQuantity || 0;
+        const requestedQty = state?.requestedQuantity || parseInt(item.quantity) || 1;
+        const remainingQty = requestedQty - purchasedQty;
+
+        // Only include items with remaining quantity
+        if (remainingQty > 0) {
+            remainingItems.push({
+                quantity: remainingQty,
+                item: item.originalItem || item.item
+            });
+        }
+    });
+
+    // Convert to CSV format compatible with upload route
+    const csvRows = ['Quantity,Item Title'];
+    remainingItems.forEach(item => {
+        // Escape quotes and wrap in quotes if item contains comma
+        const itemTitle = item.item.includes(',') || item.item.includes('"')
+            ? `"${item.item.replace(/"/g, '""')}"`
+            : item.item;
+        csvRows.push(`${item.quantity},${itemTitle}`);
+    });
+
+    const csvContent = csvRows.join('\n');
+
+    // Set response headers for file download
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `remaining-items-${timestamp}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Suggested-Filename', filename);
+    res.send(csvContent);
+}));
+
 module.exports = router;
